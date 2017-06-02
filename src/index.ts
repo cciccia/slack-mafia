@@ -1,0 +1,1 @@
+console.log(`Running enviroment ${process.env.NODE_ENV}. Hello world.`);

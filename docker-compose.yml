@@ -1,0 +1,18 @@
+version: '2'
+services:
+  app:
+    build: .
+    env_file:
+      - env/development.env
+    ports: 
+      - 3080:3080
+    networks:
+      - default
+  postgres:
+    image: postgres:9.6.3
+    networks:
+      - default
+
+networks:
+  default:
+    
