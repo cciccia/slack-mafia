@@ -6,6 +6,9 @@ services:
       - env/development.env
     depends_on:
       - postgres
+    command: ["npm", "run", "watch"]
+    volumes:
+      - .:/app
   postgres:
     image: postgres:9.6.3
     volumes:

@@ -19,7 +19,7 @@ gulp.task('clean', function () {
 /**
  * Lint all custom TypeScript files.
  */
-gulp.task('tslint', () => {
+gulp.task('tslint', ['clean'], () => {
   return gulp.src('src/**/*.ts')
     .pipe(tslint( { 
       formatter: 'prose'
@@ -42,19 +42,12 @@ function compileTS(args, cb) {
   });
 }
 
-gulp.task('config', function() {
-    return gulp.src(['src/**/*.json']).pipe(gulp.dest('./build/src'));
+gulp.task('config', ['clean'], function() {
+    return gulp.src(['src/**/*.json', 'src/**/*.js']).pipe(gulp.dest('build/src'));
 });
 
-gulp.task('compile', shell.task([
+gulp.task('compile', ['clean'], shell.task([
   'npm run tsc',
-]))
-
-/**
- * Watch for changes in TypeScript
- */
-gulp.task('watch', shell.task([
-  'npm run tsc-watch',
 ]))
 
 /**

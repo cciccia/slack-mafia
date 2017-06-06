@@ -3,7 +3,7 @@ const options = {
     promiseLib: promise
 };
 const pgp = require('pg-promise')(options);
-const connection = require('../connection');
+const connection = require('../src/db/connection');
 const db = pgp(connection.root);
 
 db.none(`DROP DATABASE IF EXISTS ${process.env.APP_DB_DATABASE}`)
