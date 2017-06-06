@@ -6,6 +6,8 @@ const tslint = require('gulp-tslint');
 const mocha = require('gulp-mocha');
 const shell = require('gulp-shell');
 
+const outDir = __dirname + '/build';
+
 /**
  * Remove build directory.
  */
@@ -40,6 +42,10 @@ function compileTS(args, cb) {
   });
 }
 
+gulp.task('config', function() {
+    return gulp.src(['src/**/*.json']).pipe(gulp.dest('./build/src'));
+});
+
 gulp.task('compile', shell.task([
   'npm run tsc',
 ]))
@@ -54,7 +60,7 @@ gulp.task('watch', shell.task([
 /**
  * Build the project.
  */
-gulp.task('build', ['tslint', 'compile'], () => {
+gulp.task('build', ['tslint', 'config', 'compile'], () => {
   console.log('Building the project ...');
 });
 
