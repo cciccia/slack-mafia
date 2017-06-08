@@ -1,4 +1,6 @@
-import { TimeOfDay } from '../constants';
+import * as _ from "lodash";
+
+import { TimeOfDay, AbilityType } from '../constants';
 import { Action, abilityFactory } from './ability';
 import { Slot } from './slot';
 
@@ -17,7 +19,7 @@ export interface Message {
     message: string;
 }
 
-let players: string[] = [];
+let players: Array<string> = [];
 let playerSlots = new Map<string, Slot>();
 
 let currentPhase: Phase;
@@ -47,7 +49,21 @@ export function removePlayer(player: string): void {
     }
 }
 
-export function addAction(action: Action): void {
+export function addOrReplaceAction(action: Action): void {
+    //remove any previous actions by that player of that type
+    let dedupers = [action.actor.player];
+
+    //factional kill has a special case that only one member of a faction can do it in a night
+    if (action.abilityType === AbilityType.FactionalKill) {
+        dedupers = _.filter(Array.from(playerSlots), ([player, slot]) => slot.alignment === action.actor.alignment)
+            .map(([player, slot]) => player);
+    }
+
+    // remove action overwritten by the new one received if any
+    _(currentActions)
+        .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.player));
+
+    // add new action
     currentActions.push(action);
 }
 

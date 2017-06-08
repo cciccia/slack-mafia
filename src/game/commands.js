@@ -1,5 +1,5 @@
 import { Action, validate } from './ability';
-import { Vote, addPlayer, removePlayer, addAction, getPhase, setVote } from './gamestate';
+import { Vote, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote } from './gamestate';
 
 // A user has joined.
 export const SubmitJoin = (player: string) => {
@@ -20,7 +20,7 @@ export const SubmitVote = (vote: Vote) => {
 export const SubmitAction = (action: Action) => {
     //todo: add messaging to user
     if (validate(action, getPhase())) {
-        addAction(action);
+        addOrReplaceAction(action);
     } else {
         
     }
