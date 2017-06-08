@@ -1,5 +1,5 @@
 export const enum ParityType {
-    Any,
+    Any = 1,
     Even,
     Odd
 }
@@ -16,11 +16,11 @@ export const enum AbilityType {
 }
 
 export const enum Alignment {
-    Town,
+    Town = 1,
     Mafia
 }
 
 export const enum TimeOfDay {
-    Day,
-    Night
+    Night = 1,
+    Day
 }

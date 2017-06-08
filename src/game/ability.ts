@@ -11,7 +11,7 @@ export interface AbilityUsage {
 
 export interface AbilityInstance {
     abilityType: AbilityType;
-    usage: AbilityUsage
+    usage: AbilityUsage;
 }
 
 export abstract class Ability {
@@ -42,18 +42,18 @@ export function validate({ actor, abilityType, target }: Action, phase: Phase) {
     if (!actor.abilities.some((ability: AbilityInstance) => {
         return ability.abilityType === abilityType
             && ability.usage.charges !== 0
-            && !(phase.num % 2 == 0 && ability.usage.parity === ParityType.Odd)
-            && !(phase.num % 2 == 1 && ability.usage.parity === ParityType.Even)
-            && !(phase.time !== ability.usage.time)
+            && !(phase.num % 2 === 0 && ability.usage.parity === ParityType.Odd)
+            && !(phase.num % 2 === 1 && ability.usage.parity === ParityType.Even)
+            && !(phase.time !== ability.usage.time);
     })) {
         return false;
     }
 
     return true;
-};
+}
 
 export interface Action {
-    actor: Slot,
-    target?: Slot,
-    abilityType: AbilityType
+    actor: Slot;
+    target?: Slot;
+    abilityType: AbilityType;
 }

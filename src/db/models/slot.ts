@@ -1,10 +1,9 @@
 import { Table, Column, Model, BelongsTo, BelongsToMany, ForeignKey } from 'sequelize-typescript';
 import Alignment from './alignment';
-import SetupRole from './setupRole';
 import Setup from './setup';
 
 @Table
-class Role extends Model<Role> {
+class Slot extends Model<Slot> {
 
     @Column
     name: string;
@@ -16,8 +15,12 @@ class Role extends Model<Role> {
     @Column
     alignmentId: number;
 
-    @BelongsToMany(() => Setup, () => SetupRole)
-    setups: Setup[];
+    @BelongsTo(() => Setup)
+    setup: Setup;
+
+    @ForeignKey(() => Setup)
+    @Column
+    setupId: number;
 }
 
-export default Role;
+export default Slot;
