@@ -12,12 +12,17 @@ export interface Vote {
     votee?: string;
 }
 
+export interface Message {
+    recipient: string;
+    message: string;
+}
+
 let players: string[] = [];
 let playerSlots = new Map<string, Slot>();
 
 let currentPhase: Phase;
 let currentActions: Action[] = [];
-let currentMessages: string[] = [];
+let currentMessages: Message[] = [];
 let currentVotes = new Map<string, string>();
 
 export function init() {
@@ -44,6 +49,10 @@ export function removePlayer(player: string): void {
 
 export function addAction(action: Action): void {
     currentActions.push(action);
+}
+
+export function addMessage(message: Message): void {
+    currentMessages.push(message);
 }
 
 export function getPhase(): Phase {
