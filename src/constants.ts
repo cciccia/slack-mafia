@@ -1,5 +1,5 @@
-export const enum CycleType {
-    All,
+export const enum ParityType {
+    Any,
     Even,
     Odd
 }

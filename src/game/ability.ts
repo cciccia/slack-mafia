@@ -1,11 +1,11 @@
-import { CycleType, AbilityType, TimeOfDay } from '../constants';
+import { ParityType, AbilityType, TimeOfDay } from '../constants';
 import { Phase } from './gamestate';
 import { Slot } from './slot';
 import { Cop } from './abilities/cop';
 
 export interface AbilityUsage {
-    charges?: number;
-    day?: CycleType;
+    charges: number;
+    parity: ParityType;
     time: TimeOfDay;
 }
 
@@ -42,8 +42,8 @@ export function validate({ actor, abilityType, target }: Action, phase: Phase) {
     if (!actor.abilities.some((ability: AbilityInstance) => {
         return ability.abilityType === abilityType
             && ability.usage.charges !== 0
-            && !(phase.num % 2 == 0 && ability.usage.day === CycleType.Odd)
-            && !(phase.num % 2 == 1 && ability.usage.day === CycleType.Even)
+            && !(phase.num % 2 == 0 && ability.usage.parity === ParityType.Odd)
+            && !(phase.num % 2 == 1 && ability.usage.parity === ParityType.Even)
             && !(phase.time !== ability.usage.time)
     })) {
         return false;
