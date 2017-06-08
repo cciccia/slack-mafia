@@ -1,20 +1,53 @@
 import { TimeOfDay } from '../constants';
-import { Action } from './ability';
+import { Action, abilityFactory } from './ability';
 import { Slot } from './slot';
 
 export interface Phase {
     time: TimeOfDay;
-    num: number;
+    num?: number;
 }
 
-export let currentPhase: Phase;
+export interface Vote {
+    voter: string;
+    votee?: string;
+}
 
-export let currentActions: Action[];
+let players: string[] = [];
+let playerSlots = new Map<string, Slot>();
 
-export let currentMessages: string[];
-
-export let slots: Slot[];
+let currentPhase: Phase;
+let currentActions: Action[] = [];
+let currentMessages: string[] = [];
+let currentVotes = new Map<string, string>();
 
 export function init() {
+    currentPhase = { time: TimeOfDay.WaitingForPlayers };
+}
 
+export function addPlayer(player: string): void {
+    players[player](player);
+}
+
+export function addAction(action: Action): void {
+    currentActions.push(action);
+}
+
+export function getPhase(): Phase {
+    return currentPhase;
+}
+
+export function setVote({ voter, votee }: Vote) {
+    currentVotes[voter] = votee;
+}
+
+export function endNight() {
+    const sortedActions = currentActions.sort((a, b) => {
+        return a.abilityType - b.abilityType;
+    });
+
+    sortedActions.forEach(action => {
+        const ability = abilityFactory(action.abilityType);
+        action.actor.consumeAbility(action.abilityType);
+        ability.resolve(action.actor, action.target);
+    });
 }

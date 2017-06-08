@@ -22,5 +22,8 @@ export const enum Alignment {
 
 export const enum TimeOfDay {
     Night = 1,
-    Day
+    Day,
+    WaitingForPlayers,
+    Pregame,
+    Postgame
 }
