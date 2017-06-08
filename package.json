@@ -26,7 +26,8 @@
     "pg": "^6.2.3",
     "pg-hstore": "^2.3.2",
     "pg-promise": "^5.9.0",
-    "sequelize": "^3.30.4"
+    "sequelize": "^3.30.4",
+    "ts-events": "^3.2.0"
   },
   "devDependencies": {
     "@types/chai": "^4.0.0",
