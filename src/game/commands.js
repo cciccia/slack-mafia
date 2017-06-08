@@ -1,9 +1,14 @@
 import { Action, validate } from './ability';
-import { Vote, addPlayer, addAction, getPhase, setVote } from './gamestate';
+import { Vote, addPlayer, removePlayer, addAction, getPhase, setVote } from './gamestate';
 
 // A user has joined.
 export const SubmitJoin = (player: string) => {
     addPlayer(player);
+}
+
+// A user has unjoined before game has started.
+export const SubmitUnJoin = (player: string) => {
+    removePlayer(player);
 }
 
 // A user has voted.

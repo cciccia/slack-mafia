@@ -25,7 +25,21 @@ export function init() {
 }
 
 export function addPlayer(player: string): void {
-    players[player](player);
+    const idx = players.indexOf(player);
+    if (idx === -1) {
+        players.push(player);
+    } else {
+        //TODO reject
+    }
+}
+
+export function removePlayer(player: string): void {
+    const idx = players.indexOf(player);
+    if (idx !== -1) {
+        players.splice(idx, 1);
+    } else {
+        //TODO reject
+    }
 }
 
 export function addAction(action: Action): void {
