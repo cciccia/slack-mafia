@@ -26,6 +26,10 @@ export class Slot {
         this.isProtectImmune = false;
     }
 
+    die(): void {
+        this.isAlive = false;
+    }
+
     consumeAbility(myAbilityType: AbilityType) {
         const myAbilityInstance = this.abilities.find(abilityInstance => {
             return abilityInstance.abilityType === myAbilityType;

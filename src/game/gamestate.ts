@@ -19,12 +19,17 @@ export interface Message {
     message: string;
 }
 
+// player info
 let players: Array<string> = [];
 let playerSlots = new Map<string, Slot>();
 
+// global (semi) permanent state
 let currentPhase: Phase;
+let daytalkEnabled: boolean = false;
+
+// global temporary state
 let currentActions: Action[] = [];
-let currentMessages: Message[] = [];
+let currentNightMessages: Message[] = [];
 let currentVotes = new Map<string, string>();
 
 export function init() {
@@ -68,15 +73,60 @@ export function addOrReplaceAction(action: Action): void {
 }
 
 export function addMessage(message: Message): void {
-    currentMessages.push(message);
+    currentNightMessages.push(message);
 }
 
 export function getPhase(): Phase {
     return currentPhase;
 }
 
+function getVc() {
+    let vc: [string, string[]][];
+
+    for (const [voter, votee] of currentVotes.entries()) {
+        const entry = vc.find(([vcVotee, vcVotes]) => votee === vcVotee);
+        if (!entry) {
+            vc.push([votee, []]);
+        }
+        entry[1].push(voter);
+    }
+    return vc.sort((a, b) => b[1].length - a[1].length);
+}
+
+function getLivingPlayers(): number {
+    return players.filter(player => playerSlots[player].isAlive).length;
+}
+
 export function setVote({ voter, votee }: Vote) {
     currentVotes[voter] = votee;
+    const vc = getVc();
+    const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
+
+    const [lynchee, votesToLynch] = vc.find(([votee, votes]) => votes.length >= halfPlus1);
+
+    //a lynch has been reached.
+    if (lynchee) {
+        playerSlots[lynchee].die();
+
+        // message about lynch, flip, night goes here
+
+        currentPhase = { time: TimeOfDay.Night, num: currentPhase.num };
+    }
+}
+
+export function getVoteCount() {
+    const vc = getVc();
+    const message: string[] = ['Votecount:'];
+
+    const livingPlayers = getLivingPlayers();
+    const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
+
+    vc.forEach(([votee, votes]) => {
+        message.push(`[${votes.length}] ${votee}: (${votes.join(', ')})`);
+    });
+
+    message.push('');
+    message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 }
 
 export function endNight() {
@@ -89,4 +139,8 @@ export function endNight() {
         action.actor.consumeAbility(action.abilityType);
         ability.resolve(action.actor, action.target);
     });
+
+    //process all messages here
+
+    currentPhase = { time: TimeOfDay.Day, num: currentPhase.num + 1 };
 }
