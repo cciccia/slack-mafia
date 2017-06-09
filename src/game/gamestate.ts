@@ -19,6 +19,8 @@ export interface Message {
     message: string;
 }
 
+const NOT_VOTING: string = 'Not Voting';
+
 // player info
 let players: Array<string> = [];
 let playerSlots = new Map<string, Slot>();
@@ -32,8 +34,17 @@ let currentActions: Action[] = [];
 let currentNightMessages: Message[] = [];
 let currentVotes = new Map<string, string>();
 
-export function init() {
-    currentPhase = { time: TimeOfDay.WaitingForPlayers };
+export function changePhase(phase: Phase): void {
+    currentPhase = phase;
+
+    for (const player of players) {
+        playerSlots[player].resetMutableState();
+        currentVotes[player] = NOT_VOTING;
+    }
+}
+
+export function init(): void {
+    changePhase({ time: TimeOfDay.WaitingForPlayers });
 }
 
 export function addPlayer(player: string): void {
@@ -83,14 +94,24 @@ export function getPhase(): Phase {
 function getVc() {
     let vc: [string, string[]][];
 
-    for (const [voter, votee] of currentVotes.entries()) {
+    for (let [voter, votee] of currentVotes.entries()) {
         const entry = vc.find(([vcVotee, vcVotes]) => votee === vcVotee);
         if (!entry) {
             vc.push([votee, []]);
         }
         entry[1].push(voter);
     }
-    return vc.sort((a, b) => b[1].length - a[1].length);
+
+    // Not Voting should always be listed last.
+    return vc.sort((a, b) => {
+        if (a[0] === NOT_VOTING) {
+            return 1;
+        } else if (b[0] === NOT_VOTING) {
+            return -1;
+        } else {
+            return b[1].length - a[1].length;
+        }
+    });
 }
 
 function getLivingPlayers(): number {
@@ -98,6 +119,9 @@ function getLivingPlayers(): number {
 }
 
 export function setVote({ voter, votee }: Vote) {
+    if (!votee) {
+        votee = NOT_VOTING;
+    }
     currentVotes[voter] = votee;
     const vc = getVc();
     const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
@@ -110,11 +134,12 @@ export function setVote({ voter, votee }: Vote) {
 
         // message about lynch, flip, night goes here
 
-        currentPhase = { time: TimeOfDay.Night, num: currentPhase.num };
+        // flip to night
+        changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
     }
 }
 
-export function getVoteCount() {
+export function buildVoteCountMessage() {
     const vc = getVc();
     const message: string[] = ['Votecount:'];
 
@@ -128,7 +153,7 @@ export function getVoteCount() {
     message.push('');
     message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 
-    // message.join('\n') ->  who the fuck knows 
+    // message.join('\n') ->  who the fuck knows
 }
 
 export function endNight() {
@@ -143,6 +168,6 @@ export function endNight() {
     });
 
     //process all messages here
+    changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
 
-    currentPhase = { time: TimeOfDay.Day, num: currentPhase.num + 1 };
 }

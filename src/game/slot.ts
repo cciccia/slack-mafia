@@ -21,7 +21,7 @@ export class Slot {
         this.abilities = abilities;
     }
 
-    reset(): void {
+    resetMutableState(): void {
         this.isProtected = false;
         this.isProtectImmune = false;
     }
