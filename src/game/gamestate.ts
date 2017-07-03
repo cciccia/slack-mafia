@@ -153,7 +153,7 @@ export function buildVoteCountMessage() {
     message.push('');
     message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 
-    // message.join('\n') ->  who the fuck knows
+    return message.join('\n');
 }
 
 export function endNight() {

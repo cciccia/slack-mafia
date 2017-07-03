@@ -1,5 +1,5 @@
 import { Action, validate } from './ability';
-import { Vote, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote } from './gamestate';
+import { Vote, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, buildVoteCountMessage } from './gamestate';
 
 /**
 *
@@ -31,4 +31,8 @@ export const SubmitAction = (action: Action) => {
     } else {
 
     }
+};
+
+export const RequestVoteCount = () => {
+    return buildVoteCountMessage();
 };

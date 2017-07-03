@@ -12,11 +12,11 @@ const path = require('path');
 const basename = path.basename(module.filename);
 const env = process.env.NODE_ENV || 'development';
 
-const app_config = require(__dirname + '/connection').app;
+const conn = require(__dirname + '/config/config')[env];
 
 const sequelize = new Sequelize(Object.assign({
-    modelPaths: [__dirname + '/models']
-}, app_config));
+    modelPaths: [__dirname + '/models'],
+}, conn));
 
 const db: Db = {
     sequelize,

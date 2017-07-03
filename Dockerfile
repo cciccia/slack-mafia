@@ -2,7 +2,7 @@ FROM node:8.0.0
 
 MAINTAINER cciccia
 
-RUN npm install nodemon  -g
+RUN npm install nodemon sequelize-cli -g
 
 # specify the working directory
 WORKDIR app
