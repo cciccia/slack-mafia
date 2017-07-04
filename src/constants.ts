@@ -1,11 +1,11 @@
-export const enum ParityType {
-    Any = 1,
+export enum ParityType {
+    Any,
     Even,
     Odd
 }
 
 // this enum's order is important -- earlier entries have higher priority than later ones
-export const enum AbilityType {
+export enum AbilityType {
     //passive abilities should generally all resolve first (i think)
     Macho,
 
@@ -15,13 +15,13 @@ export const enum AbilityType {
     Cop
 }
 
-export const enum Alignment {
-    Town = 1,
+export enum Alignment {
+    Town,
     Mafia
 }
 
-export const enum TimeOfDay {
-    Night = 1,
+export enum TimeOfDay {
+    Night,
     Day,
     WaitingForPlayers,
     Pregame,

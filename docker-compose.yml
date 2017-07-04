@@ -11,6 +11,8 @@ services:
       - .:/app
   postgres:
     image: postgres:9.6.3
+    ports:
+      - "15432:5432"
     volumes:
       - ./data:/var/lib/postgresql/data
     

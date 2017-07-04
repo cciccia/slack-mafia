@@ -62,3 +62,6 @@ build/
 
 # data container
 data/
+
+# local resources
+resources/setups.edn
