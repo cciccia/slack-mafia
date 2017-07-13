@@ -43,7 +43,9 @@ function compileTS(args, cb) {
 }
 
 gulp.task('config', ['clean'], function() {
-    return gulp.src(['src/**/*.json', 'src/**/*.js']).pipe(gulp.dest('build/src'));
+    return gulp.src(['src/**/*.json',
+                     'src/**/*.js',
+                     'src/**/*.edn']).pipe(gulp.dest('build/src'));
 });
 
 gulp.task('compile', ['clean'], shell.task([

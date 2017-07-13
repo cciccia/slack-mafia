@@ -1,8 +1,7 @@
-import { Ability } from '../ability';
 import { Slot } from '../slot';
 
-export class Macho extends Ability {
+export default {
     resolve(actor: Slot, target: Slot): void {
         target.isProtectImmune = true;
     }
-}
+};

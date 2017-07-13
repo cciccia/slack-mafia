@@ -1,8 +1,13 @@
 import * as _ from "lodash";
 
-import { TimeOfDay, AbilityType } from '../constants';
+import { getSetup } from './setup';
+
+import { TimeOfDay, AbilityType, ParityType } from '../constants';
 import { Action, abilityFactory } from './ability';
 import { Slot } from './slot';
+
+import { getEdn } from '../utils';
+const edn = getEdn();
 
 export interface Phase {
     time: TimeOfDay;
@@ -26,6 +31,7 @@ let players: Array<string> = [];
 let playerSlots = new Map<string, Slot>();
 
 // global (semi) permanent state
+let currentSetup;
 let currentPhase: Phase;
 let daytalkEnabled: boolean = false;
 
@@ -34,12 +40,46 @@ let currentActions: Action[] = [];
 let currentNightMessages: Message[] = [];
 let currentVotes = new Map<string, string>();
 
+export function setSetup(tag: string): void {
+    if (currentPhase.time === TimeOfDay.WaitingForPlayers) {
+        currentSetup = getSetup(tag);
+    } else {
+        //TODO error
+    }
+}
+
+export function startGame(): void {
+    playerSlots.clear();
+
+    const shuffledPlayers = _.shuffle(players);
+    shuffledPlayers.forEach((player, i) => {
+        const rawSlot = currentSetup.at(edn.kw(':slots')).at(i);
+
+        const name = rawSlot.at(edn.kw(':name'));
+        const alignment = rawSlot.at(edn.kw(':alignment'));
+
+        const abilities = rawSlot.at(edn.kw(':abilities')).map(ability => {
+            return {
+                abilityType: ability.at(edn.kw(':ability-type')),
+                usage: {
+                    charges: ability.atPath(':usage :charges') || -1,
+                    parity: ability.atPath(':usage :parity') || ParityType.Any,
+                    time: ability.atPath(':usage :time') || TimeOfDay.Night
+                }
+            };
+        });
+
+        const slot = new Slot(name, alignment, abilities);
+        playerSlots.set(player, slot);
+    });
+}
+
 export function changePhase(phase: Phase): void {
     currentPhase = phase;
 
     for (const player of players) {
         playerSlots[player].resetMutableState();
-        currentVotes[player] = NOT_VOTING;
+        currentVotes.set(player, NOT_VOTING);
     }
 }
 
@@ -115,14 +155,14 @@ function getVc() {
 }
 
 function getLivingPlayers(): number {
-    return players.filter(player => playerSlots[player].isAlive).length;
+    return players.filter(player => playerSlots.get(player).isAlive).length;
 }
 
 export function setVote({ voter, votee }: Vote) {
     if (!votee) {
         votee = NOT_VOTING;
     }
-    currentVotes[voter] = votee;
+    currentVotes.set(voter, votee);
     const vc = getVc();
     const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
 
@@ -130,7 +170,7 @@ export function setVote({ voter, votee }: Vote) {
 
     //a lynch has been reached.
     if (lynchee) {
-        playerSlots[lynchee].die();
+        playerSlots.get(lynchee).die();
 
         // message about lynch, flip, night goes here
 

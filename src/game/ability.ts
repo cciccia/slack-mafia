@@ -1,7 +1,7 @@
 import { ParityType, AbilityType, TimeOfDay } from '../constants';
 import { Phase } from './gamestate';
 import { Slot } from './slot';
-import { Cop } from './abilities/cop';
+import Cop from './abilities/cop';
 
 export interface AbilityUsage {
     charges: number;
@@ -14,14 +14,10 @@ export interface AbilityInstance {
     usage: AbilityUsage;
 }
 
-export abstract class Ability {
-    abstract resolve(actor: Slot, target: Slot): void;
-}
-
 export function abilityFactory(abilityType: AbilityType) {
     switch (abilityType) {
         case AbilityType.Cop:
-            return new Cop();
+            return Cop;
         default:
             throw "Bad stop";
     }

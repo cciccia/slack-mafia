@@ -1,5 +1,5 @@
 import { Action, validate } from './ability';
-import { Vote, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, buildVoteCountMessage } from './gamestate';
+import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, buildVoteCountMessage } from './gamestate';
 
 /**
 *
@@ -7,6 +7,9 @@ import { Vote, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, b
 *
 **/
 
+export const SetSetup = (tag: string) => {
+    setSetup(tag);
+};
 
 // A user has joined.
 export const SubmitJoin = (player: string) => {

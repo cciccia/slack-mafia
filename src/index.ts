@@ -1,23 +1,22 @@
 import { getEdn } from './utils';
+import { listSetups, getSetup } from './game/setup';
 
 const fs = require('fs');
 const edn = getEdn();
 
+const SlackBot = require('slackbots');
+
+const bot_token = process.env.SLACK_BOT_TOKEN || '';
+const bot = new SlackBot({
+    token: bot_token,
+    name: 'Flaccid McDougal'
+});
+
 console.log(`Running enviroment ${process.env.NODE_ENV}. Hello world.`);
 
-try {
-    const setups = edn.parse(fs.readFileSync('./resources/setups.edn', 'utf8'));
-    console.log(`Listing all available setups:`);
-    setups.each(setup => {
-        console.log(`--------------------------------------`);
-        console.log(`Name: ${setup.at(edn.kw(':name'))}`);
-        console.log(`Slots: `);
-        setup.at(edn.kw(':slots')).each(slot => {
-            console.log(`\t${slot.at(edn.kw(':name'))}`);
-        });
-        console.log(`To play, type "!setup ${setup.at(edn.kw(':tag'))}"`);
-        console.log(`--------------------------------------`);
-    });
-} catch (e) {
-    console.error(`Error: Missing or malformed setup configuration file found at resources/setups.edn`);
-}
+console.log(getSetup('bird').at(edn.kw(':slots')).at(6).at(edn.kw(':abilities')).at(0));
+
+bot.on('start', function() {
+    bot.postMessageToChannel(process.env.SLACK_GAME_CHANNEL, 'Beware: I live!');
+});
+
