@@ -1,11 +1,8 @@
 import { Slot } from '../slot';
-import { addMessage } from '../gamestate';
+import bot from '../../comm/bot';
 
 export default {
     resolve(actor: Slot, target: Slot): void {
-        addMessage({
-            recipient: actor.player,
-            message: `${target.player} is aligned with the ${target.alignment}`
-        });
+        bot.postMessageToUser(actor.playerId, `${bot.getUserById(target.playerId).name} is aligned with the ${target.alignment}`);
     }
 };

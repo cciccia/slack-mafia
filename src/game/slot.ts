@@ -3,7 +3,8 @@ import { Alignment, AbilityType } from '../constants';
 
 export class Slot {
     // immutable state
-    readonly player: string;
+    readonly playerId: string;
+    readonly name: string;
     readonly alignment: Alignment;
     readonly abilities: AbilityInstance[];
 
@@ -15,8 +16,9 @@ export class Slot {
     isProtected: boolean = false;
     isProtectImmune: boolean = false;
 
-    constructor(player: string, alignment: Alignment, abilities: AbilityInstance[]) {
-        this.player = player;
+    constructor(playerId: string, name: string, alignment: Alignment, abilities: AbilityInstance[]) {
+        this.playerId = playerId;
+        this.name = name;
         this.alignment = alignment;
         this.abilities = abilities;
     }

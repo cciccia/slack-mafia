@@ -32,6 +32,8 @@
     "pg-promise": "^5.9.0",
     "sequelize": "^3.30.4",
     "slackbots": "^1.0.2",
+    "superagent": "^3.5.2",
+    "superagent-bluebird-promise": "^4.2.0",
     "ts-events": "^3.2.0"
   },
   "devDependencies": {

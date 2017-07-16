@@ -22,6 +22,11 @@ export function listSetups() {
     }
 }
 
+export function getFirstSetup() {
+    const setups = edn.parse(fs.readFileSync('./resources/setups.edn', 'utf8'));
+    return setups.at(0);
+}
+
 export function getSetup(tag: string) {
     try {
         const setups = edn.parse(fs.readFileSync('./resources/setups.edn', 'utf8'));

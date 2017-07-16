@@ -1,13 +1,14 @@
 import * as _ from "lodash";
 
-import { getSetup } from './setup';
+import { getEdn } from '../utils';
+const edn = getEdn();
 
+import { getSetup, getFirstSetup } from './setup';
 import { TimeOfDay, AbilityType, ParityType } from '../constants';
 import { Action, abilityFactory } from './ability';
 import { Slot } from './slot';
 
-import { getEdn } from '../utils';
-const edn = getEdn();
+import bot from '../comm/bot';
 
 export interface Phase {
     time: TimeOfDay;
@@ -15,19 +16,14 @@ export interface Phase {
 }
 
 export interface Vote {
-    voter: string;
-    votee?: string;
-}
-
-export interface Message {
-    recipient: string;
-    message: string;
+    voterId: string;
+    voteeId?: string;
 }
 
 const NOT_VOTING: string = 'Not Voting';
 
 // player info
-let players: Array<string> = [];
+let playerIds: Array<string> = [];
 let playerSlots = new Map<string, Slot>();
 
 // global (semi) permanent state
@@ -37,22 +33,29 @@ let daytalkEnabled: boolean = false;
 
 // global temporary state
 let currentActions: Action[] = [];
-let currentNightMessages: Message[] = [];
 let currentVotes = new Map<string, string>();
 
+export function setDefaultSetup(): void {
+    currentSetup = getFirstSetup();
+    bot.postMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
+}
+
 export function setSetup(tag: string): void {
-    if (currentPhase.time === TimeOfDay.WaitingForPlayers) {
-        currentSetup = getSetup(tag);
-    } else {
-        //TODO error
+    if (currentPhase.time !== TimeOfDay.WaitingForPlayers) {
+        try {
+            currentSetup = getSetup(tag);
+            bot.postMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
+        } catch (e) {
+            bot.postMessage(`${tag} is not a valid setup.`);
+        }
     }
 }
 
 export function startGame(): void {
     playerSlots.clear();
 
-    const shuffledPlayers = _.shuffle(players);
-    shuffledPlayers.forEach((player, i) => {
+    const shuffledPlayers = _.shuffle(playerIds);
+    shuffledPlayers.forEach((playerId, i) => {
         const rawSlot = currentSetup.at(edn.kw(':slots')).at(i);
 
         const name = rawSlot.at(edn.kw(':name'));
@@ -69,17 +72,17 @@ export function startGame(): void {
             };
         });
 
-        const slot = new Slot(name, alignment, abilities);
-        playerSlots.set(player, slot);
+        const slot = new Slot(playerId, name, alignment, abilities);
+        playerSlots.set(playerId, slot);
     });
 }
 
 export function changePhase(phase: Phase): void {
     currentPhase = phase;
 
-    for (const player of players) {
-        playerSlots[player].resetMutableState();
-        currentVotes.set(player, NOT_VOTING);
+    for (const playerId of playerIds) {
+        playerSlots.get(playerId).resetMutableState();
+        currentVotes.set(playerId, NOT_VOTING);
     }
 }
 
@@ -87,27 +90,27 @@ export function init(): void {
     changePhase({ time: TimeOfDay.WaitingForPlayers });
 }
 
-export function addPlayer(player: string): void {
-    const idx = players.indexOf(player);
+export function addPlayer(playerId: string): void {
+    const idx = playerIds.indexOf(playerId);
     if (idx === -1) {
-        players.push(player);
+        playerIds.push(playerId);
     } else {
-        //TODO reject
+        bot.postMessage(`Player ${bot.getUserById(playerId).name} is already signed up.`);
     }
 }
 
-export function removePlayer(player: string): void {
-    const idx = players.indexOf(player);
+export function removePlayer(playerId: string): void {
+    const idx = playerIds.indexOf(playerId);
     if (idx !== -1) {
-        players.splice(idx, 1);
+        playerIds.splice(idx, 1);
     } else {
-        //TODO reject
+        // probably ignore?
     }
 }
 
 export function addOrReplaceAction(action: Action): void {
     //remove any previous actions by that player of that type
-    let dedupers = [action.actor.player];
+    let dedupers = [action.actor.playerId];
 
     //factional kill has a special case that only one member of a faction can do it in a night
     if (action.abilityType === AbilityType.FactionalKill) {
@@ -117,14 +120,10 @@ export function addOrReplaceAction(action: Action): void {
 
     // remove action overwritten by the new one received if any
     _(currentActions)
-        .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.player));
+        .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.playerId));
 
     // add new action
     currentActions.push(action);
-}
-
-export function addMessage(message: Message): void {
-    currentNightMessages.push(message);
 }
 
 export function getPhase(): Phase {
@@ -134,12 +133,12 @@ export function getPhase(): Phase {
 function getVc() {
     let vc: [string, string[]][];
 
-    for (let [voter, votee] of currentVotes.entries()) {
-        const entry = vc.find(([vcVotee, vcVotes]) => votee === vcVotee);
+    for (let [voterId, voteeId] of currentVotes.entries()) {
+        const entry = vc.find(([vcVoteeId, vcVotesId]) => voteeId === vcVoteeId);
         if (!entry) {
-            vc.push([votee, []]);
+            vc.push([voteeId, []]);
         }
-        entry[1].push(voter);
+        entry[1].push(voterId);
     }
 
     // Not Voting should always be listed last.
@@ -155,45 +154,56 @@ function getVc() {
 }
 
 function getLivingPlayers(): number {
-    return players.filter(player => playerSlots.get(player).isAlive).length;
+    return playerIds.filter(playerId => playerSlots.get(playerId).isAlive).length;
 }
 
-export function setVote({ voter, votee }: Vote) {
-    if (!votee) {
-        votee = NOT_VOTING;
+function clearVotes(): void {
+    for (const voterId of playerIds) {
+        setVote({ voterId });
     }
-    currentVotes.set(voter, votee);
+}
+
+export function setVote({ voterId, voteeId }: Vote) {
+    if (currentPhase.time !== TimeOfDay.Day) {
+        return;
+    }
+
+    if (!voteeId) {
+        voteeId = NOT_VOTING;
+    }
+    currentVotes.set(voterId, voteeId);
     const vc = getVc();
     const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
 
-    const [lynchee, votesToLynch] = vc.find(([votee, votes]) => votes.length >= halfPlus1);
+    const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
     //a lynch has been reached.
-    if (lynchee) {
-        playerSlots.get(lynchee).die();
+    if (lyncheeId) {
+        const slot = playerSlots.get(lyncheeId);
+        slot.die();
+        bot.postMessage(`${bot.getUserById(lyncheeId).name} was lynched. They were a ${slot.name}.`);
 
-        // message about lynch, flip, night goes here
-
-        // flip to night
         changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
+
+        bot.postMessage(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
+
+        setTimeout(endNight, 300000);  //TODO parametrize?
     }
 }
 
-export function buildVoteCountMessage() {
+export function doVoteCount() {
     const vc = getVc();
     const message: string[] = ['Votecount:'];
 
     const livingPlayers = getLivingPlayers();
     const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
 
-    vc.forEach(([votee, votes]) => {
-        message.push(`[${votes.length}] ${votee}: (${votes.join(', ')})`);
+    vc.forEach(([voteeId, votes]) => {
+        bot.postMessage(`[${votes.length}] ${voteeId}: (${votes.join(', ')}) `);
     });
 
-    message.push('');
-    message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
-
-    return message.join('\n');
+    bot.postMessage('');
+    bot.postMessage(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 }
 
 export function endNight() {
@@ -207,7 +217,7 @@ export function endNight() {
         ability.resolve(action.actor, action.target);
     });
 
-    //process all messages here
     changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
-
+    clearVotes();
+    doVoteCount();
 }
