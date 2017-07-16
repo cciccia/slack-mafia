@@ -2,7 +2,7 @@ FROM node:8.0.0
 
 MAINTAINER cciccia
 
-RUN npm install nodemon sequelize-cli -g
+RUN npm install nodemon sequelize-cli gulp typescript -g
 
 # specify the working directory
 WORKDIR app
