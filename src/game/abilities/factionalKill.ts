@@ -5,7 +5,7 @@ export default {
     resolve(actor: Slot, target: Slot): void {
         if (!target.isProtected) {
             target.die();
-            bot.postMessage(`${bot.getUserById(target.playerId).name} was killed. They were a ${target.name}.`);
+            bot.postPublicMessage(`${bot.getUserById(target.playerId).name} was killed. They were a ${target.name}.`);
         }
     }
 };

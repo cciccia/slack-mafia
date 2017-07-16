@@ -37,16 +37,16 @@ let currentVotes = new Map<string, string>();
 
 export function setDefaultSetup(): void {
     currentSetup = getFirstSetup();
-    bot.postMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
+    bot.postPublicMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
 }
 
 export function setSetup(tag: string): void {
     if (currentPhase.time !== TimeOfDay.WaitingForPlayers) {
         try {
             currentSetup = getSetup(tag);
-            bot.postMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
+            bot.postPublicMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
         } catch (e) {
-            bot.postMessage(`${tag} is not a valid setup.`);
+            bot.postPublicMessage(`${tag} is not a valid setup.`);
         }
     }
 }
@@ -95,7 +95,7 @@ export function addPlayer(playerId: string): void {
     if (idx === -1) {
         playerIds.push(playerId);
     } else {
-        bot.postMessage(`Player ${bot.getUserById(playerId).name} is already signed up.`);
+        bot.postPublicMessage(`Player ${bot.getUserById(playerId).name} is already signed up.`);
     }
 }
 
@@ -181,11 +181,11 @@ export function setVote({ voterId, voteeId }: Vote) {
     if (lyncheeId) {
         const slot = playerSlots.get(lyncheeId);
         slot.die();
-        bot.postMessage(`${bot.getUserById(lyncheeId).name} was lynched. They were a ${slot.name}.`);
+        bot.postPublicMessage(`${bot.getUserById(lyncheeId).name} was lynched. They were a ${slot.name}.`);
 
         changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
 
-        bot.postMessage(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
+        bot.postPublicMessage(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
 
         setTimeout(endNight, 300000);  //TODO parametrize?
     }
@@ -199,11 +199,11 @@ export function doVoteCount() {
     const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
 
     vc.forEach(([voteeId, votes]) => {
-        bot.postMessage(`[${votes.length}] ${voteeId}: (${votes.join(', ')}) `);
+        bot.postPublicMessage(`[${votes.length}] ${voteeId}: (${votes.join(', ')}) `);
     });
 
-    bot.postMessage('');
-    bot.postMessage(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
+    bot.postPublicMessage('');
+    bot.postPublicMessage(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 }
 
 export function endNight() {

@@ -7,8 +7,8 @@ const edn = getEdn();
 
 console.log(`Running enviroment ${process.env.NODE_ENV}. Hello world.`);
 
-bot.on('start', function() {
+bot.on('open', function() {
     setDefaultSetup();
-    bot.postMessage('I am now accepting commands.');
+    bot.postPublicMessage('I am now accepting commands.');
 });
 
