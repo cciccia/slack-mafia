@@ -4,11 +4,14 @@ import { getEdn } from '../utils';
 const edn = getEdn();
 
 import { getSetup, getFirstSetup } from './setup';
-import { TimeOfDay, AbilityType, ParityType } from '../constants';
+import { TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment } from '../constants';
 import { Action, abilityFactory } from './ability';
 import { Slot } from './slot';
 
 import bot from '../comm/bot';
+import { createPrivateChannel } from '../comm/restCommands';
+
+const shortId = require('shortid');
 
 export interface Phase {
     time: TimeOfDay;
@@ -27,6 +30,7 @@ let playerIds: Array<string> = [];
 let playerSlots = new Map<string, Slot>();
 
 // global (semi) permanent state
+let currentGameId: string;
 let currentSetup;
 let currentPhase: Phase;
 let daytalkEnabled: boolean = false;
@@ -34,6 +38,10 @@ let daytalkEnabled: boolean = false;
 // global temporary state
 let currentActions: Action[] = [];
 let currentVotes = new Map<string, string>();
+
+export function getGameId(): string {
+    return currentGameId;
+}
 
 export function setDefaultSetup(): void {
     currentSetup = getFirstSetup();
@@ -52,6 +60,7 @@ export function setSetup(tag: string): void {
 }
 
 export function startGame(): void {
+    currentGameId = shortId.generate();
     playerSlots.clear();
 
     const shuffledPlayers = _.shuffle(playerIds);
@@ -75,6 +84,23 @@ export function startGame(): void {
         const slot = new Slot(playerId, name, alignment, abilities);
         playerSlots.set(playerId, slot);
     });
+    createPrivateChannels();
+}
+
+export function createPrivateChannels() {
+    const alignmentMap = Array.from(playerSlots.values())
+        .reduce((p, c) => {
+            if (!p.has(c.alignment)) {
+                return p.set(c.alignment, [c.playerId]);
+            } else {
+                p.get(c.alignment).push(c.playerId);
+                return p;
+            }
+        }, new Map<Alignment, [string]>());
+
+    return Promise.all(Array.from(alignmentMap.entries()).map(([alignment, members]) => {
+        return createPrivateChannel(`${AlignmentAttributesMap[alignment].name}-${getGameId()}`, members);
+    }));
 }
 
 export function changePhase(phase: Phase): void {

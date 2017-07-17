@@ -1,5 +1,5 @@
 import { AbilityInstance } from './ability';
-import { Alignment, AbilityType } from '../constants';
+import { Alignment, AlignmentAttributesMap, AbilityType, ParityType, TimeOfDay } from '../constants';
 
 export class Slot {
     // immutable state
@@ -21,6 +21,15 @@ export class Slot {
         this.name = name;
         this.alignment = alignment;
         this.abilities = abilities;
+
+        if (AlignmentAttributesMap.get(this.alignment).hasFactionalKill) {
+            this.abilities.push({
+                abilityType: AbilityType.FactionalKill,
+                usage: {
+                    charges: -1, parity: ParityType.Any, time: TimeOfDay.Night
+                }
+            });
+        }
     }
 
     resetMutableState(): void {

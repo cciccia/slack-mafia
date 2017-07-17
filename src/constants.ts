@@ -20,6 +20,25 @@ export enum Alignment {
     Mafia
 }
 
+export interface AlignmentAttributes {
+    name: string,
+    hasFactionalCommunication: boolean
+    hasFactionalKill: boolean
+}
+
+export const AlignmentAttributesMap = new Map<Alignment, AlignmentAttributes>([
+    [Alignment.Town, {
+        name: 'Town',
+        hasFactionalCommunication: false,
+        hasFactionalKill: false
+    },
+    Alignment.Mafia, {
+        name: 'Mafia',
+        hasFactionalCommunication: true,
+        hasFactionalKill: true
+    }]
+]);
+
 export enum TimeOfDay {
     Night,
     Day,
