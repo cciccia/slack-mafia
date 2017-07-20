@@ -58,13 +58,13 @@ typings/
 .env
 
 # typescript build
-build/
+app/build/
 
 # data container
 data/
 
 # local resources
-resources/setups.edn
+app/resources/setups.edn
 
 # env
 development.env

@@ -21,9 +21,9 @@ export enum Alignment {
 }
 
 export interface AlignmentAttributes {
-    name: string,
-    hasFactionalCommunication: boolean
-    hasFactionalKill: boolean
+    name: string;
+    hasFactionalCommunication: boolean;
+    hasFactionalKill: boolean;
 }
 
 export const AlignmentAttributesMap = new Map<Alignment, AlignmentAttributes>([
