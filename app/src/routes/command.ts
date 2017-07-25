@@ -15,7 +15,7 @@ class CommandRouter {
             const body = req.body;
 
             if (body.token !== process.env.SLACK_VERIFICATION_TOKEN) {
-                res.sendStatus(401);
+                return res.sendStatus(401);
             }
             next();
         });
