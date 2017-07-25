@@ -116,12 +116,17 @@ export function init(): void {
     changePhase({ time: TimeOfDay.WaitingForPlayers });
 }
 
-export function addPlayer(playerId: string): void {
+export function addPlayer(playerId: string): boolean {
     const idx = playerIds.indexOf(playerId);
     if (idx === -1) {
         playerIds.push(playerId);
+        bot.getUserById(playerId)
+            .then(player => {
+                bot.postPublicMessage(`${player.name} has joined.`);
+            });
+        return true;
     } else {
-        bot.postPublicMessage(`Player ${bot.getUserById(playerId).name} is already signed up.`);
+        return false;
     }
 }
 

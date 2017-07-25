@@ -12,17 +12,17 @@ export const SetSetup = (tag: string) => {
 };
 
 // A user has joined.
-export const SubmitJoin = (player: string) => {
-    addPlayer(player);
+export const JoinGame = (playerId: string): boolean => {
+    return addPlayer(playerId);
 };
 
 // A user has unjoined before game has started.
-export const SubmitUnJoin = (player: string) => {
-    removePlayer(player);
+export const UnJoinGame = (playerId: string) => {
+    removePlayer(playerId);
 };
 
 // A user has voted.
-export const SubmitVote = (vote: Vote) => {
+export const MakeVote = (vote: Vote) => {
     setVote(vote);
 };
 
@@ -36,6 +36,6 @@ export const SubmitAction = (action: Action) => {
     }
 };
 
-export const RequestVoteCount = () => {
+export const VoteCount = () => {
     return doVoteCount();
 };
