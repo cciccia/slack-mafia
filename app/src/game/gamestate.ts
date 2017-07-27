@@ -116,17 +116,12 @@ export function init(): void {
     changePhase({ time: TimeOfDay.WaitingForPlayers });
 }
 
-export function addPlayer(playerId: string): boolean {
+export function addPlayer(playerId: string): void {
     const idx = playerIds.indexOf(playerId);
     if (idx === -1) {
         playerIds.push(playerId);
-        bot.getUserById(playerId)
-            .then(player => {
-                bot.postPublicMessage(`${player.name} has joined.`);
-            });
-        return true;
     } else {
-        return false;
+        throw new Error("You are already signed up!");
     }
 }
 
@@ -135,7 +130,7 @@ export function removePlayer(playerId: string): void {
     if (idx !== -1) {
         playerIds.splice(idx, 1);
     } else {
-        // probably ignore?
+        throw new Error("You are not currently signed up.");
     }
 }
 

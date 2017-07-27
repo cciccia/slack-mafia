@@ -21,17 +21,21 @@ class CommandRouter {
         });
 
         this.router.post('/in', this.joinGame);
+        this.router.post('/out', this.unJoinGame);
     }
 
     joinGame(req: Request, res: Response) {
         const playerId = req.body.user_id;
         const result = gameCommands.JoinGame(playerId);
 
-        if (result) {
-            res.json({ text: 'You are now signed up!' });
-        } else {
-            res.json({ text: 'You are already signed up!' });
-        }
+        res.json({ text: result });
+    }
+
+    unJoinGame(req: Request, res: Response) {
+        const playerId = req.body.user_id;
+        const result = gameCommands.UnJoinGame(playerId);
+
+        res.json({ text: result });
     }
 }
 

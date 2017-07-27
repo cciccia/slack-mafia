@@ -1,6 +1,8 @@
 import { Action, validate } from './ability';
 import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, doVoteCount } from './gamestate';
 
+import bot from '../comm/bot';
+
 /**
 *
 * This is the public API for the messaging portion of the app to communicate w/ the game portion of the app
@@ -12,13 +14,31 @@ export const SetSetup = (tag: string) => {
 };
 
 // A user has joined.
-export const JoinGame = (playerId: string): boolean => {
-    return addPlayer(playerId);
+export const JoinGame = (playerId: string): string => {
+    try {
+        addPlayer(playerId);
+        bot.getUserById(playerId)
+            .then(player => {
+                bot.postPublicMessage(`${player.name} has joined.`);
+            });
+        return 'You are now signed up!';
+    } catch (e) {
+        return e.message;
+    }
 };
 
 // A user has unjoined before game has started.
 export const UnJoinGame = (playerId: string) => {
-    removePlayer(playerId);
+    try {
+        removePlayer(playerId);
+        bot.getUserById(playerId)
+            .then(player => {
+                bot.postPublicMessage(`${player.name} has left.`);
+            });
+        return 'You are no longer signed up!';
+    } catch (e) {
+        return e.message;
+    }
 };
 
 // A user has voted.
