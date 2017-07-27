@@ -22,6 +22,7 @@ class CommandRouter {
 
         this.router.post('/in', this.joinGame);
         this.router.post('/out', this.unJoinGame);
+        this.router.post('/setup', this.setSetup);
     }
 
     joinGame(req: Request, res: Response) {
@@ -34,6 +35,13 @@ class CommandRouter {
     unJoinGame(req: Request, res: Response) {
         const playerId = req.body.user_id;
         const result = gameCommands.UnJoinGame(playerId);
+
+        res.json({ text: result });
+    }
+
+    setSetup(req: Request, res: Response) {
+        const setupTag = req.body.text;
+        const result = gameCommands.SetSetup(setupTag);
 
         res.json({ text: result });
     }

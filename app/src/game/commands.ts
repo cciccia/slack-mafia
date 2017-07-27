@@ -10,7 +10,14 @@ import bot from '../comm/bot';
 **/
 
 export const SetSetup = (tag: string) => {
-    setSetup(tag);
+    try {
+        const setup = setSetup(tag);
+        bot.postPublicMessage(`Setup was changed to ${setup[':name']} (${setup[':slots'].length} players)`);
+
+        return 'Setup changed!';
+    } catch (e) {
+        return e.message;
+    }
 };
 
 // A user has joined.
@@ -28,7 +35,7 @@ export const JoinGame = (playerId: string): string => {
 };
 
 // A user has unjoined before game has started.
-export const UnJoinGame = (playerId: string) => {
+export const UnJoinGame = (playerId: string): string => {
     try {
         removePlayer(playerId);
         bot.getUserById(playerId)

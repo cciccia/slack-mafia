@@ -39,23 +39,30 @@ let daytalkEnabled: boolean = false;
 let currentActions: Action[] = [];
 let currentVotes = new Map<string, string>();
 
+export function init(): void {
+    changePhase({ time: TimeOfDay.WaitingForPlayers });
+}
+
 export function getGameId(): string {
     return currentGameId;
 }
 
 export function setDefaultSetup(): void {
     currentSetup = getFirstSetup();
-    bot.postPublicMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
+    bot.postPublicMessage(`Setup was changed to "${currentSetup[':name']}".`);
 }
 
-export function setSetup(tag: string): void {
-    if (currentPhase.time !== TimeOfDay.WaitingForPlayers) {
-        try {
-            currentSetup = getSetup(tag);
-            bot.postPublicMessage(`Setup was changed to "${currentSetup.at(edn.kw(':name'))}".`);
-        } catch (e) {
-            bot.postPublicMessage(`${tag} is not a valid setup.`);
+export function setSetup(tag: string): any {
+    if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
+        const newSetup = getSetup(tag);
+        if (newSetup) {
+            currentSetup = newSetup;
+            return currentSetup;
+        } else {
+            throw new Error(`${tag} is not a valid setup.`);
         }
+    } else {
+        throw new Error(`Cannot change setup at this time.`);
     }
 }
 
@@ -65,18 +72,18 @@ export function startGame(): void {
 
     const shuffledPlayers = _.shuffle(playerIds);
     shuffledPlayers.forEach((playerId, i) => {
-        const rawSlot = currentSetup.at(edn.kw(':slots')).at(i);
+        const rawSlot = currentSetup[':slots'][i];
 
-        const name = rawSlot.at(edn.kw(':name'));
-        const alignment = rawSlot.at(edn.kw(':alignment'));
+        const name = rawSlot[':name'];
+        const alignment = rawSlot[':alignment'];
 
-        const abilities = rawSlot.at(edn.kw(':abilities')).map(ability => {
+        const abilities = rawSlot[':abilities'].map(ability => {
             return {
-                abilityType: ability.at(edn.kw(':ability-type')),
+                abilityType: ability[':ability-type'],
                 usage: {
-                    charges: ability.atPath(':usage :charges') || -1,
-                    parity: ability.atPath(':usage :parity') || ParityType.Any,
-                    time: ability.atPath(':usage :time') || TimeOfDay.Night
+                    charges: ability[':usage'][':charges'] || -1,
+                    parity: ability[':usage'][':parity'] || ParityType.Any,
+                    time: ability[':usage'][':time'] || TimeOfDay.Night
                 }
             };
         });
@@ -110,10 +117,6 @@ export function changePhase(phase: Phase): void {
         playerSlots.get(playerId).resetMutableState();
         currentVotes.set(playerId, NOT_VOTING);
     }
-}
-
-export function init(): void {
-    changePhase({ time: TimeOfDay.WaitingForPlayers });
 }
 
 export function addPlayer(playerId: string): void {
