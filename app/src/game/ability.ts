@@ -14,6 +14,22 @@ export interface AbilityInstance {
     usage: AbilityUsage;
 }
 
+const actionMapDef = {
+    investigate: AbilityType.Cop,
+    protect: AbilityType.Doctor,
+    kill: AbilityType.FactionalKill
+};
+
+const actionMap = new Map<String, AbilityType>(Object.entries(actionMapDef));
+
+export function actionResolver(actionName: String): AbilityType {
+    if (!actionMap.has(actionName)) {
+        throw new Error(`Action ${actionName} was not recognized.`);
+    }
+
+    return actionMap.get(actionName);
+}
+
 export function abilityFactory(abilityType: AbilityType) {
     switch (abilityType) {
         case AbilityType.Cop:

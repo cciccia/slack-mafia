@@ -4,8 +4,8 @@ import { getEdn } from '../utils';
 const edn = getEdn();
 
 import { getSetup, getFirstSetup } from './setup';
-import { TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment } from '../constants';
-import { Action, abilityFactory } from './ability';
+import { TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment, AbilityActivationType } from '../constants';
+import { Action, abilityFactory, validate, actionResolver } from './ability';
 import { Slot } from './slot';
 
 import bot from '../comm/bot';
@@ -38,6 +38,12 @@ let daytalkEnabled: boolean = false;
 // global temporary state
 let currentActions: Action[] = [];
 let currentVotes = new Map<string, string>();
+
+function requirePlaying(playerId: string): void {
+    if (!playerSlots.has(playerId)) {
+        throw new Error('You are not currently playing!');
+    }
+}
 
 export function init(): void {
     changePhase({ time: TimeOfDay.WaitingForPlayers });
@@ -137,12 +143,34 @@ export function removePlayer(playerId: string): void {
     }
 }
 
-export function addOrReplaceAction(action: Action): void {
+export function addOrReplaceAction(actorId: string, actionName: string, targetId: string, targetName: string) {
+    requirePlaying(actorId);
+
+    if (!playerSlots.has(targetId)) {
+        throw new Error(`${targetName} is not currently playing!`);
+    }
+
+    addOrReplaceFormattedAction({
+        actor: playerSlots.get(actorId),
+        abilityType: actionResolver(actionName),
+        target: targetId == null ? null : playerSlots.get(targetId)
+    });
+}
+
+function addOrReplaceFormattedAction(action: Action): void {
+    const abilityDef = abilityFactory(action.abilityType);
+
+    console.log(action);
+
+    if (!validate(action, currentPhase)) {
+        throw new Error('You are unable to perform this action.');
+    }
+
     //remove any previous actions by that player of that type
     let dedupers = [action.actor.playerId];
 
-    //factional kill has a special case that only one member of a faction can do it in a night
-    if (action.abilityType === AbilityType.FactionalKill) {
+    //factional actions may only be performed by one faction member per night
+    if (abilityDef.activationType === AbilityActivationType.Factional) {
         dedupers = _.filter(Array.from(playerSlots), ([player, slot]) => slot.alignment === action.actor.alignment)
             .map(([player, slot]) => player);
     }
@@ -194,12 +222,13 @@ function clearVotes(): void {
 
 export function setVote({ voterId, voteeId }: Vote) {
     if (currentPhase.time !== TimeOfDay.Day) {
-        return;
+        throw new Error("You cannot vote right now.");
     }
 
     if (!voteeId) {
         voteeId = NOT_VOTING;
     }
+
     currentVotes.set(voterId, voteeId);
     const vc = getVc();
     const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
@@ -235,7 +264,22 @@ export function doVoteCount() {
     bot.postPublicMessage(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 }
 
-export function endNight() {
+function endNight() {
+    // apply all passives
+    playerSlots.forEach(slot => {
+        slot.abilities.forEach(ability => {
+            const abilityDef = abilityFactory(ability.abilityType);
+            if (abilityDef.activationType === AbilityActivationType.Passive) {
+                try {
+                    addOrReplaceFormattedAction({
+                        actor: slot,
+                        abilityType: ability.abilityType
+                    });
+                } finally { }
+            }
+        });
+    });
+
     const sortedActions = currentActions.sort((a, b) => {
         return a.abilityType - b.abilityType;
     });

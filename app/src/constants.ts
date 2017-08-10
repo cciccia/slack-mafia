@@ -4,6 +4,12 @@ export enum ParityType {
     Odd
 }
 
+export enum AbilityActivationType {
+    Active,
+    Passive,
+    Factional
+}
+
 // this enum's order is important -- earlier entries have higher priority than later ones
 export enum AbilityType {
     //passive abilities should generally all resolve first (i think)

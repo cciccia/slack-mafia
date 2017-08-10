@@ -8,7 +8,8 @@
         "sourceMap": true,
         "typeRoots": ["node_modules/@types"],
         "experimentalDecorators": true,
-        "emitDecoratorMetadata": true
+        "emitDecoratorMetadata": true,
+        "lib": ["es2017"]
     },
     "include": [
         "src/**/**.ts",
