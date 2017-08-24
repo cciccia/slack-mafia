@@ -1,0 +1,1 @@
+export const slackMock = require('slack-mock')({ rtmPort: 9001, logLevel: process.env.LOG_LEVEL });

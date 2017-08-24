@@ -1,5 +1,5 @@
-const Promise = require('bluebird');
-const request = require('superagent-bluebird-promise');
+import * as Promise from 'bluebird';
+import * as request from 'superagent-bluebird-promise';
 
 export function createPrivateChannel(name: string, users: string[]) {
     return request
@@ -16,7 +16,8 @@ export function createPrivateChannel(name: string, users: string[]) {
                     token: process.env.SLACK_API_TOKEN,
                     channel: response.id,
                     user
-                })));
+                })))
+                .then(() => response.id);
         });
 }
 

@@ -38,7 +38,8 @@
     "slackbots": "^1.0.2",
     "superagent": "^3.5.2",
     "superagent-bluebird-promise": "^4.2.0",
-    "ts-events": "^3.2.0"
+    "ts-events": "^3.2.0",
+    "winston": "^2.3.1"
   },
   "devDependencies": {
     "@types/body-parser": "^1.16.4",

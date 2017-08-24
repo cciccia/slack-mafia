@@ -5,7 +5,7 @@ const edn = getEdn();
 
 import { getSetup, getFirstSetup } from './setup';
 import { TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment, AbilityActivationType } from '../constants';
-import { Action, abilityFactory, validate, actionResolver } from './ability';
+import { Action, abilityFactory, validate, actionResolver, actionDescriber } from './ability';
 import { Slot } from './slot';
 
 import bot from '../comm/bot';
@@ -25,15 +25,19 @@ export interface Vote {
 
 const NOT_VOTING: string = 'Not Voting';
 
-// player info
-let playerIds: Array<string> = [];
-let playerSlots = new Map<string, Slot>();
+// game transcending state
+let currentSetup;
+
+// faction info
+let factionChannels = new Map<Alignment, string>();
 
 // global (semi) permanent state
 let currentGameId: string;
-let currentSetup;
 let currentPhase: Phase;
-let daytalkEnabled: boolean = false;
+
+// player info
+let playerIds: Array<string> = [];
+let playerSlots = new Map<string, Slot>();
 
 // global temporary state
 let currentActions: Action[] = [];
@@ -45,17 +49,27 @@ function requirePlaying(playerId: string): void {
     }
 }
 
-export function init(): void {
+export function reset(): void {
     changePhase({ time: TimeOfDay.WaitingForPlayers });
-}
+    currentGameId = undefined;
 
+    playerIds.length = 0;
+    playerSlots.clear();
+
+    currentActions.length = 0;
+    currentVotes.clear();
+
+}
 export function getGameId(): string {
     return currentGameId;
 }
 
 export function setDefaultSetup(): void {
     currentSetup = getFirstSetup();
-    bot.postPublicMessage(`Setup was changed to "${currentSetup[':name']}".`);
+}
+
+export function getCurrentSetup(): any {
+    return currentSetup;
 }
 
 export function setSetup(tag: string): any {
@@ -72,7 +86,8 @@ export function setSetup(tag: string): any {
     }
 }
 
-export function startGame(): void {
+function startGame(): void {
+    changePhase({ time: TimeOfDay.Pregame });
     currentGameId = shortId.generate();
     playerSlots.clear();
 
@@ -97,10 +112,15 @@ export function startGame(): void {
         const slot = new Slot(playerId, name, alignment, abilities);
         playerSlots.set(playerId, slot);
     });
-    createPrivateChannels();
+
+    Promise.all([createPrivateChannels(), sendRoles()])
+        .then(() => {
+            changePhase({ time: TimeOfDay.Day, num: 1 });
+            bot.postMessage(`It is now Day 1.`);
+        });
 }
 
-export function createPrivateChannels() {
+function createPrivateChannels() {
     const alignmentMap = Array.from(playerSlots.values())
         .reduce((p, c) => {
             if (!p.has(c.alignment)) {
@@ -111,12 +131,24 @@ export function createPrivateChannels() {
             }
         }, new Map<Alignment, [string]>());
 
-    return Promise.all(Array.from(alignmentMap.entries()).map(([alignment, members]) => {
-        return createPrivateChannel(`${AlignmentAttributesMap[alignment].name}-${getGameId()}`, members);
-    }));
+    return Promise.all(Array.from(alignmentMap.entries())
+        .filter(([alignment, _]) => alignment !== Alignment.Town)
+        .map(([alignment, members]) => {
+            return createPrivateChannel(`${AlignmentAttributesMap[alignment].name}-${getGameId()}`, members)
+                .then(channelId => {
+                    factionChannels.set(alignment, channelId);
+                });
+        }));
 }
 
-export function changePhase(phase: Phase): void {
+function sendRoles() {
+    return Promise.all(Array.from(playerSlots.entries())
+        .map(([playerId, slot]) => {
+            return bot.postMessageToUser(playerId, `Your role is: ${slot.name}.`);
+        }));
+}
+
+function changePhase(phase: Phase): void {
     currentPhase = phase;
 
     for (const playerId of playerIds) {
@@ -127,8 +159,14 @@ export function changePhase(phase: Phase): void {
 
 export function addPlayer(playerId: string): void {
     const idx = playerIds.indexOf(playerId);
-    if (idx === -1) {
+
+    if (playerIds.length >= currentSetup.slots.length) {
+        throw new Error("Game is full!");
+    } else if (idx === -1) {
         playerIds.push(playerId);
+        if (currentSetup && (currentSetup.slots.length === playerIds.length)) {
+            startGame();
+        }
     } else {
         throw new Error("You are already signed up!");
     }
@@ -160,8 +198,6 @@ export function addOrReplaceAction(actorId: string, actionName: string, targetId
 function addOrReplaceFormattedAction(action: Action): void {
     const abilityDef = abilityFactory(action.abilityType);
 
-    console.log(action);
-
     if (!validate(action, currentPhase)) {
         throw new Error('You are unable to perform this action.');
     }
@@ -181,6 +217,26 @@ function addOrReplaceFormattedAction(action: Action): void {
 
     // add new action
     currentActions.push(action);
+    currentActions.sort((a, b) => {
+        return a.abilityType - b.abilityType;
+    });
+
+    if (factionChannels.has(action.actor.alignment)) {
+        bot.postMessage(factionChannels.get(action.actor.alignment), getActionsForFaction(action.actor.alignment).map(action => {
+            let a = `${action.actor} will ${actionDescriber(action.abilityType)}`;
+
+            if (action.target) {
+                a += ` ${action.target}`;
+            }
+            return a;
+        }).join('\n'));
+    }
+}
+
+export function getActionsForFaction(faction: Alignment): Action[] {
+    return currentActions.filter(action => {
+        return action.actor.alignment === faction;
+    });
 }
 
 export function getPhase(): Phase {
@@ -235,17 +291,20 @@ export function setVote({ voterId, voteeId }: Vote) {
 
     const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
+    const message: string[] = [];
+
     //a lynch has been reached.
     if (lyncheeId) {
         const slot = playerSlots.get(lyncheeId);
         slot.die();
-        bot.postPublicMessage(`${bot.getUserById(lyncheeId).name} was lynched. They were a ${slot.name}.`);
+        message.push(`${bot.getUserById(lyncheeId).name} was lynched.They were a ${slot.name}.`);
+        message.push(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
 
-        changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
-
-        bot.postPublicMessage(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
-
-        setTimeout(endNight, 300000);  //TODO parametrize?
+        bot.postPublicMessage(message.join('\n'))
+            .then(() => {
+                changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
+                setTimeout(endNight, 300000);  //TODO parametrize?
+            });
     }
 }
 
@@ -257,11 +316,13 @@ export function doVoteCount() {
     const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
 
     vc.forEach(([voteeId, votes]) => {
-        bot.postPublicMessage(`[${votes.length}] ${voteeId}: (${votes.join(', ')}) `);
+        message.push(`[${votes.length}] ${voteeId}: (${votes.join(', ')}) `);
     });
 
-    bot.postPublicMessage('');
-    bot.postPublicMessage(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
+    message.push('');
+    message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
+
+    bot.postPublicMessage(message.join('\n'));
 }
 
 function endNight() {
@@ -280,17 +341,16 @@ function endNight() {
         });
     });
 
-    const sortedActions = currentActions.sort((a, b) => {
-        return a.abilityType - b.abilityType;
-    });
-
-    sortedActions.forEach(action => {
+    currentActions.forEach(action => {
         const ability = abilityFactory(action.abilityType);
         action.actor.consumeAbility(action.abilityType);
         ability.resolve(action.actor, action.target);
     });
 
     changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
-    clearVotes();
-    doVoteCount();
+    bot.postMessage(`It is now Day ${currentPhase.num}`)
+        .then(() => {
+            clearVotes();
+            doVoteCount();
+        });
 }

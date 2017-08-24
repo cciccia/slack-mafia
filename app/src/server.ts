@@ -2,6 +2,7 @@ import * as bodyParser from "body-parser";
 import * as express from "express";
 
 import commandRouter from './routes/command';
+import logger from './logger';
 
 class Server {
 
@@ -24,9 +25,8 @@ class Server {
     public config() {
         this.app.use(bodyParser.json());
         this.app.use(bodyParser.urlencoded({ extended: false }));
-
         this.app.use(function(err, req, res, next) {
-            console.error(err.stack);
+            logger.error(err.stack);
             res.status(500).send('An error has occurred.');
         });
     }

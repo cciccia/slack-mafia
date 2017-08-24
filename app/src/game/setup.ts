@@ -2,10 +2,11 @@ import { getEdn } from '../utils';
 const edn = getEdn();
 
 const fs = require('fs');
+const path = require('path');
 
 export function listSetups() {
     try {
-        const setups = edn.parse(fs.readFileSync('./resources/setups.edn', 'utf8')).jsEncode();
+        const setups = edn.parse(fs.readFileSync(path.join('.', process.env.SETUP_FILE), 'utf8')).jsEncode();
         console.log(`Listing all available setups:`);
         setups.forEach(setup => {
             console.log(`--------------------------------------`);
@@ -23,13 +24,13 @@ export function listSetups() {
 }
 
 export function getFirstSetup() {
-    const setups = edn.parse(fs.readFileSync('./resources/setups.edn', 'utf8')).jsEncode();
+    const setups = edn.parse(fs.readFileSync(path.join('.', process.env.SETUP_FILE), 'utf8')).jsEncode();
     return setups[0];
 }
 
 export function getSetup(tag: string) {
     try {
-        const setups = edn.parse(fs.readFileSync('./resources/setups.edn', 'utf8')).jsEncode();
+        const setups = edn.parse(fs.readFileSync(path.join('.', process.env.SETUP_FILE), 'utf8')).jsEncode();
         return setups.find(setup => {
             return tag === setup[':tag'];
         });

@@ -30,6 +30,19 @@ export function actionResolver(actionName: String): AbilityType {
     return actionMap.get(actionName);
 }
 
+export function actionDescriber(abilityType: AbilityType) {
+    let verb;
+
+    for (const [key, value] of actionMap.entries()) {
+        if (value === abilityType) {
+            verb = key;
+            break;
+        }
+    }
+
+    return verb;
+}
+
 export function abilityFactory(abilityType: AbilityType) {
     switch (abilityType) {
         case AbilityType.Cop:

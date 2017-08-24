@@ -1,0 +1,17 @@
+[{:name "Bird 7p"
+  :tag "bird"
+  :slots [{:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Town Macho Cop" :alignment #sm/enum :alignment/town :abilities [{:ability-type #sm/enum :ability-type/cop}
+                                                                                  {:ability-type #sm/enum :ability-type/macho}]}
+          {:name "Town Doctor" :alignment #sm/enum :alignment/town :abilities [{:ability-type #sm/enum :ability-type/doctor}]}
+          {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}
+          {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}]
+  :has-day-talk false}
+ {:name "Boring 3p"
+  :tag "boring"
+  :slots [{:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}]
+  :has-day-talk false}]
