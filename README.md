@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/cciccia/slack-mafia.svg?branch=master)](https://travis-ci.org/cciccia/slack-mafia)
+
 # slack-mafia
 Slackbot that runs mafia games
 
