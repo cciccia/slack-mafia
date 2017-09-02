@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 
+import logger from '../logger';
 import bot from '../comm/bot';
 import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, doVoteCount } from '../game/gamestate';
 

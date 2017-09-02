@@ -37,8 +37,8 @@ export const AlignmentAttributesMap = new Map<Alignment, AlignmentAttributes>([
         name: 'Town',
         hasFactionalCommunication: false,
         hasFactionalKill: false
-    },
-    Alignment.Mafia, {
+    }],
+    [Alignment.Mafia, {
         name: 'Mafia',
         hasFactionalCommunication: true,
         hasFactionalKill: true

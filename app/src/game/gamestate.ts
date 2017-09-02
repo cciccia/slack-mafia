@@ -60,6 +60,11 @@ export function reset(): void {
     currentVotes.clear();
 
 }
+
+export function getPlayers(): Map<string, Slot> {
+    return playerSlots;
+}
+
 export function getGameId(): string {
     return currentGameId;
 }
@@ -92,6 +97,7 @@ function startGame(): void {
     playerSlots.clear();
 
     const shuffledPlayers = _.shuffle(playerIds);
+
     shuffledPlayers.forEach((playerId, i) => {
         const rawSlot = currentSetup[':slots'][i];
 
@@ -102,9 +108,9 @@ function startGame(): void {
             return {
                 abilityType: ability[':ability-type'],
                 usage: {
-                    charges: ability[':usage'][':charges'] || -1,
-                    parity: ability[':usage'][':parity'] || ParityType.Any,
-                    time: ability[':usage'][':time'] || TimeOfDay.Night
+                    charges: (ability[':usage'] && ability[':usage'][':charges']) || -1,
+                    parity: (ability[':usage'] && ability[':usage'][':parity']) || ParityType.Any,
+                    time: (ability[':usage'] && ability[':usage'][':time']) || TimeOfDay.Night
                 }
             };
         });
@@ -116,7 +122,7 @@ function startGame(): void {
     Promise.all([createPrivateChannels(), sendRoles()])
         .then(() => {
             changePhase({ time: TimeOfDay.Day, num: 1 });
-            bot.postMessage(`It is now Day 1.`);
+            bot.postPublicMessage(`It is now Day 1.`);
         });
 }
 
@@ -134,9 +140,9 @@ function createPrivateChannels() {
     return Promise.all(Array.from(alignmentMap.entries())
         .filter(([alignment, _]) => alignment !== Alignment.Town)
         .map(([alignment, members]) => {
-            return createPrivateChannel(`${AlignmentAttributesMap[alignment].name}-${getGameId()}`, members)
+            return createPrivateChannel(`${AlignmentAttributesMap.get(alignment).name}-${getGameId()}`, members)
                 .then(channelId => {
-                    factionChannels.set(alignment, channelId);
+                    return factionChannels.set(alignment, channelId);
                 });
         }));
 }
@@ -144,7 +150,7 @@ function createPrivateChannels() {
 function sendRoles() {
     return Promise.all(Array.from(playerSlots.entries())
         .map(([playerId, slot]) => {
-            return bot.postMessageToUser(playerId, `Your role is: ${slot.name}.`);
+            return bot.postMessageToUserById(playerId, `Your role is: ${slot.name}.`);
         }));
 }
 
@@ -152,19 +158,21 @@ function changePhase(phase: Phase): void {
     currentPhase = phase;
 
     for (const playerId of playerIds) {
-        playerSlots.get(playerId).resetMutableState();
         currentVotes.set(playerId, NOT_VOTING);
+        if (playerSlots.has(playerId)) {
+            playerSlots.get(playerId).resetMutableState();
+        }
     }
 }
 
 export function addPlayer(playerId: string): void {
     const idx = playerIds.indexOf(playerId);
 
-    if (playerIds.length >= currentSetup.slots.length) {
+    if (playerIds.length >= currentSetup[':slots'].length) {
         throw new Error("Game is full!");
     } else if (idx === -1) {
         playerIds.push(playerId);
-        if (currentSetup && (currentSetup.slots.length === playerIds.length)) {
+        if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
             startGame();
         }
     } else {
@@ -222,7 +230,7 @@ function addOrReplaceFormattedAction(action: Action): void {
     });
 
     if (factionChannels.has(action.actor.alignment)) {
-        bot.postMessage(factionChannels.get(action.actor.alignment), getActionsForFaction(action.actor.alignment).map(action => {
+        bot.postPublicMessage(factionChannels.get(action.actor.alignment), getActionsForFaction(action.actor.alignment).map(action => {
             let a = `${action.actor} will ${actionDescriber(action.abilityType)}`;
 
             if (action.target) {
@@ -348,7 +356,7 @@ function endNight() {
     });
 
     changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
-    bot.postMessage(`It is now Day ${currentPhase.num}`)
+    bot.postPublicMessage(`It is now Day ${currentPhase.num}`)
         .then(() => {
             clearVotes();
             doVoteCount();

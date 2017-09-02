@@ -6,6 +6,9 @@ export default {
     activationType: AbilityActivationType.Active,
 
     resolve(actor: Slot, target: Slot): void {
-        bot.postMessageToUser(actor.playerId, `${bot.getUserById(target.playerId).name} is aligned with the ${target.alignment}`);
+        bot.getUserById(target.playerId)
+            .then(p => {
+                bot.postMessageToUserById(actor.playerId, `${p.name} is aligned with the ${target.alignment}`);
+            });
     }
 };

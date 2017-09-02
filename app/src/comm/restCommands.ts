@@ -4,6 +4,7 @@ import * as request from 'superagent-bluebird-promise';
 export function createPrivateChannel(name: string, users: string[]) {
     return request
         .post(`${process.env.SLACK_API_URL}/groups.create`)
+        .set('Content-Type', 'application/x-www-form-urlencoded')
         .send({
             token: process.env.SLACK_API_TOKEN,
             name,
@@ -12,6 +13,7 @@ export function createPrivateChannel(name: string, users: string[]) {
         .then(response => {
             return Promise.all(users.map(user => request
                 .post(`${process.env.SLACK_API_URL}/groups.invite`)
+                .set('Content-Type', 'application/x-www-form-urlencoded')
                 .send({
                     token: process.env.SLACK_API_TOKEN,
                     channel: response.id,
