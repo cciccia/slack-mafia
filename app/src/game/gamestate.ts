@@ -252,15 +252,15 @@ export function getPhase(): Phase {
 }
 
 function getVc() {
-    let vc: [string, string[]][];
-
-    for (let [voterId, voteeId] of currentVotes.entries()) {
-        const entry = vc.find(([vcVoteeId, vcVotesId]) => voteeId === vcVoteeId);
+    const vc = Array.from(currentVotes.entries()).reduce((acc, [voterId, voteeId]) => {
+        let entry = acc.find(([vcVoteeId, vcVotesId]) => voteeId === vcVoteeId);
         if (!entry) {
-            vc.push([voteeId, []]);
+            entry = [voteeId, []];
+            acc.push(entry);
         }
         entry[1].push(voterId);
-    }
+        return acc;
+    }, []);
 
     // Not Voting should always be listed last.
     return vc.sort((a, b) => {

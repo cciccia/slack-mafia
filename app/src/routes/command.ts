@@ -1,4 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import * as Promise from 'bluebird';
+import * as channels from 'channels';
 
 import logger from '../logger';
 import bot from '../comm/bot';
@@ -6,10 +8,25 @@ import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, 
 
 class CommandRouter {
     router: Router;
+    chan: any;
 
     constructor() {
         this.router = Router();
+        this.chan = new channels.channels(this.processAction);
         this.init();
+    }
+
+    processAction({ handler, req, res }, done) {
+        handler(req, res)
+            .then(() => {
+                done();
+            });
+    }
+
+    registerEmitter(handler) {
+        return (req: Request, res: Response) => {
+            this.chan.emit('actionProcessor', { handler, req, res });
+        };
     }
 
     init() {
@@ -22,55 +39,56 @@ class CommandRouter {
             next();
         });
 
-        this.router.post('/in', this.joinGame);
-        this.router.post('/out', this.unJoinGame);
-        this.router.post('/setup', this.setSetup);
-        this.router.post('/vote', this.makeVote);
-        this.router.post('/unvote', this.makeUnvote);
-        this.router.post('/act', this.submitAction);
+        this.router.post('/in', this.registerEmitter(this.joinGame));
+        this.router.post('/out', this.registerEmitter(this.unJoinGame));
+        this.router.post('/setup', this.registerEmitter(this.setSetup));
+        this.router.post('/vote', this.registerEmitter(this.makeVote));
+        this.router.post('/unvote', this.registerEmitter(this.makeUnvote));
+        this.router.post('/act', this.registerEmitter(this.submitAction));
+        this.router.post('/vc', this.registerEmitter(this.requestVotecount));
     }
 
     joinGame(req: Request, res: Response) {
         const playerId = req.body.user_id;
 
-        try {
+        return Promise.try(() => {
             addPlayer(playerId);
             bot.getUserById(playerId)
                 .then(player => {
                     bot.postPublicMessage(`${player.name} has joined.`);
                 });
             res.json({ text: 'You are now signed up!' });
-        } catch (e) {
+        }).catch(e => {
             res.json({ text: e.message });
-        }
+        });
     }
 
     unJoinGame(req: Request, res: Response) {
         const playerId = req.body.user_id;
 
-        try {
+        return Promise.try(() => {
             removePlayer(playerId);
             bot.getUserById(playerId)
                 .then(player => {
                     bot.postPublicMessage(`${player.name} has left.`);
                 });
             res.json({ text: 'You are no longer signed up!' });
-        } catch (e) {
+        }).catch(e => {
             res.json({ text: e.message });
-        }
+        });
     }
 
     setSetup(req: Request, res: Response) {
         const setupTag = req.body.text;
 
-        try {
+        return Promise.try(() => {
             const setup = setSetup(setupTag);
             bot.postPublicMessage(`Setup was changed to ${setup[':name']} (${setup[':slots'].length} players)`);
 
             res.json({ text: 'Setup changed!' });
-        } catch (e) {
+        }).catch(e => {
             res.json({ text: e.message });
-        }
+        });
     }
 
     makeVote(req: Request, res: Response) {
@@ -78,7 +96,7 @@ class CommandRouter {
         const voterName = req.body.user_name;
         const voteeName = req.body.text;
 
-        bot.getUserId(voteeName)
+        return bot.getUserId(voteeName)
             .then(voteeId => {
                 setVote({ voterId, voteeId });
                 bot.postPublicMessage(`${voterName} is now voting ${voteeName}.`);
@@ -93,13 +111,13 @@ class CommandRouter {
         const voterId = req.body.user_id;
         const voterName = req.body.user_name;
 
-        try {
+        return Promise.try(() => {
             setVote({ voterId });
             bot.postPublicMessage(`${voterName} is no longer voting.`);
             res.json({ text: "Vote cleared!" });
-        } catch (e) {
+        }).catch(e => {
             res.json({ text: e.message });
-        }
+        });
     }
 
     submitAction(req: Request, res: Response) {
@@ -107,9 +125,7 @@ class CommandRouter {
         const actorName = req.body.user_name;
         const [actionName, targetName] = req.body.text.split(' ');
 
-        const promise = targetName ? bot.getUserId(targetName) : Promise.resolve(null);
-
-        return promise
+        return Promise.try(() => targetName ? bot.getUserId(targetName) : null)
             .then(targetId => {
                 addOrReplaceAction(actorId, actionName, targetId, targetName);
                 res.json({ text: "Confirming: ${actionName} on ${targetName}" });
@@ -117,6 +133,15 @@ class CommandRouter {
             .catch(e => {
                 res.json({ text: e.message });
             });
+    }
+
+    requestVotecount(req: Request, res: Response) {
+        return Promise.try(() => {
+            doVoteCount();
+            res.json({ text: "Ok!" });
+        }).catch(e => {
+            res.json({ text: e.message });
+        });
     }
 }
 
