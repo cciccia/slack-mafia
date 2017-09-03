@@ -78,10 +78,12 @@ function buildGroupInviteCall(id) {
             .then(() => {
                 return Promise.all(clients.map(client => client.doSlashCommand('/in')));
             })
-            .then(() => Promise.delay(150))
+            .then(() => Promise.delay(500))
             .then(() => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
                 const sCalls = slackMock.slashCommands.calls.map(call => call.params);
+
+                console.log(wCalls);
 
                 const players = Array.from(gamestate.getPlayers().entries());
                 players.map(player => player[0]).should.not.eql(clients.map(client => client.id));
@@ -103,6 +105,8 @@ function buildGroupInviteCall(id) {
                 mafia.forEach(mafioso => {
                     wCalls.should.deep.contain(buildGroupInviteCall(mafioso[0]));
                 });
+
+                wCalls.should.deep.contain(buildChatCall(bot.channels[0].id, `It is now Day 1.`));
             });
     }
 }
