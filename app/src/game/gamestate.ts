@@ -1,4 +1,5 @@
 import * as _ from "lodash";
+import * as Promise from 'bluebird';
 
 import { getEdn } from '../utils';
 const edn = getEdn();
@@ -37,6 +38,7 @@ let currentPhase: Phase;
 
 // player info
 let playerIds: Array<string> = [];
+let playerUserData: Array<any>;
 let playerSlots = new Map<string, Slot>();
 
 // global temporary state
@@ -47,6 +49,14 @@ function requirePlaying(playerId: string): void {
     if (!playerSlots.has(playerId)) {
         throw new Error('You are not currently playing!');
     }
+}
+
+function getPlayerUserMap() {
+    return Promise.all(playerIds.map(playerId => bot.getUserById(playerId)))
+        .then(users => users.reduce((acc, user) => {
+            acc.set(user.id, user);
+            return acc;
+        }, new Map<string, any>()));
 }
 
 export function reset(): void {
@@ -78,20 +88,22 @@ export function getCurrentSetup(): any {
 }
 
 export function setSetup(tag: string): any {
-    if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
-        const newSetup = getSetup(tag);
-        if (newSetup) {
-            currentSetup = newSetup;
-            return currentSetup;
+    return Promise.try(() => {
+        if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
+            const newSetup = getSetup(tag);
+            if (newSetup) {
+                currentSetup = newSetup;
+                return bot.postPublicMessage(`Setup was changed to ${currentSetup[':name']} (${currentSetup[':slots'].length} players)`);
+            } else {
+                throw new Error(`${tag} is not a valid setup.`);
+            }
         } else {
-            throw new Error(`${tag} is not a valid setup.`);
+            throw new Error(`Cannot change setup at this time.`);
         }
-    } else {
-        throw new Error(`Cannot change setup at this time.`);
-    }
+    });
 }
 
-function startGame(): void {
+function startGame() {
     changePhase({ time: TimeOfDay.Pregame });
     currentGameId = shortId.generate();
     playerSlots.clear();
@@ -119,10 +131,10 @@ function startGame(): void {
         playerSlots.set(playerId, slot);
     });
 
-    Promise.all([createPrivateChannels(), sendRoles()])
+    return Promise.all([createPrivateChannels(), sendRoles()])
         .then(() => {
             changePhase({ time: TimeOfDay.Day, num: 1 });
-            bot.postPublicMessage(`It is now Day 1.`);
+            return bot.postPublicMessage(`It is now Day 1.`);
         });
 }
 
@@ -165,41 +177,53 @@ function changePhase(phase: Phase): void {
     }
 }
 
-export function addPlayer(playerId: string): void {
-    const idx = playerIds.indexOf(playerId);
+export function addPlayer(playerId: string) {
+    return Promise.try(() => {
+        const idx = playerIds.indexOf(playerId);
 
-    if (playerIds.length >= currentSetup[':slots'].length) {
-        throw new Error("Game is full!");
-    } else if (idx === -1) {
-        playerIds.push(playerId);
-        if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
-            startGame();
+        if (playerIds.length >= currentSetup[':slots'].length) {
+            throw new Error("Game is full!");
+        } else if (idx === -1) {
+            playerIds.push(playerId);
+            return bot.getUserById(playerId)
+                .then(player => bot.postPublicMessage(`${player.name} has joined.`))
+                .then(() => {
+                    if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
+                        return startGame();
+                    }
+                });
+        } else {
+            throw new Error("You are already signed up!");
         }
-    } else {
-        throw new Error("You are already signed up!");
-    }
+    });
 }
 
-export function removePlayer(playerId: string): void {
-    const idx = playerIds.indexOf(playerId);
-    if (idx !== -1) {
-        playerIds.splice(idx, 1);
-    } else {
-        throw new Error("You are not currently signed up.");
-    }
+export function removePlayer(playerId: string) {
+    return Promise.try(() => {
+        const idx = playerIds.indexOf(playerId);
+        if (idx !== -1) {
+            playerIds.splice(idx, 1);
+            return bot.getUserById(playerId)
+                .then(player => bot.postPublicMessage(`${player.name} has left.`));
+        } else {
+            throw new Error("You are not currently signed up.");
+        }
+    });
 }
 
 export function addOrReplaceAction(actorId: string, actionName: string, targetId: string, targetName: string) {
-    requirePlaying(actorId);
+    return Promise.try(() => {
+        requirePlaying(actorId);
 
-    if (!playerSlots.has(targetId)) {
-        throw new Error(`${targetName} is not currently playing!`);
-    }
+        if (!playerSlots.has(targetId)) {
+            throw new Error(`${targetName} is not currently playing!`);
+        }
 
-    addOrReplaceFormattedAction({
-        actor: playerSlots.get(actorId),
-        abilityType: actionResolver(actionName),
-        target: targetId == null ? null : playerSlots.get(targetId)
+        addOrReplaceFormattedAction({
+            actor: playerSlots.get(actorId),
+            abilityType: actionResolver(actionName),
+            target: targetId == null ? null : playerSlots.get(targetId)
+        });
     });
 }
 
@@ -279,8 +303,9 @@ function getLivingPlayers(): number {
 }
 
 function clearVotes(): void {
+    currentVotes.clear();
     for (const voterId of playerIds) {
-        setVote({ voterId });
+        currentVotes.set(voterId, NOT_VOTING);
     }
 }
 
@@ -294,26 +319,42 @@ export function setVote({ voterId, voteeId }: Vote) {
     }
 
     currentVotes.set(voterId, voteeId);
-    const vc = getVc();
-    const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
 
-    const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
+    return getPlayerUserMap()
+        .then(userMap => {
+            if (voteeId === NOT_VOTING) {
+                return Promise.all([
+                    userMap,
+                    bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${userMap.get(voteeId).name}.`)
+                ]);
+            } else {
+                return Promise.all([
+                    userMap, bot.postPublicMessage(`${userMap.get(voterId).name} is no longer voting.`)
+                ]);
+            }
+        })
+        .then(([userMap, _]) => {
+            const vc = getVc();
+            const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
 
-    const message: string[] = [];
+            const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
-    //a lynch has been reached.
-    if (lyncheeId) {
-        const slot = playerSlots.get(lyncheeId);
-        slot.die();
-        message.push(`${bot.getUserById(lyncheeId).name} was lynched.They were a ${slot.name}.`);
-        message.push(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
+            const message: string[] = [];
 
-        bot.postPublicMessage(message.join('\n'))
-            .then(() => {
-                changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
-                setTimeout(endNight, 300000);  //TODO parametrize?
-            });
-    }
+            //a lynch has been reached.
+            if (lyncheeId) {
+                const slot = playerSlots.get(lyncheeId);
+                slot.die();
+                message.push(`${userMap.get(lyncheeId).name} was lynched.They were a ${slot.name}.`);
+                message.push(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
+
+                return bot.postPublicMessage(message.join('\n'));
+            }
+        })
+        .then(() => {
+            setTimeout(endNight, 300000);  //TODO parametrize?
+            return changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
+        });
 }
 
 export function doVoteCount() {
@@ -323,14 +364,17 @@ export function doVoteCount() {
     const livingPlayers = getLivingPlayers();
     const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
 
-    vc.forEach(([voteeId, votes]) => {
-        message.push(`[${votes.length}] ${voteeId}: (${votes.join(', ')}) `);
-    });
+    return getPlayerUserMap()
+        .then(userMap => {
+            vc.forEach(([voteeId, votes]) => {
+                message.push(`[${votes.length}] ${userMap.get(voteeId).name}: (${votes.map(vote => userMap.get(vote).name).join(', ')})`);
+            });
 
-    message.push('');
-    message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
+            message.push('');
+            message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 
-    bot.postPublicMessage(message.join('\n'));
+            bot.postPublicMessage(message.join('\n'));
+        });
 }
 
 function endNight() {

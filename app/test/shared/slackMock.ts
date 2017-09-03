@@ -27,7 +27,6 @@ export function slackMockForUsers(numUsers: number) {
             doSlashCommand: function(command, text = '') {
                 const payload = Object.assign({ command, text }, this.props);
                 return slackMock.slashCommands.send(`http://localhost:3000/api/v1/commands${command}`, payload)
-                    .then(result => Promise.delay(75))
                     .catch(e => { throw e; });
             }
         }

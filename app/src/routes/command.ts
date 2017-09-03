@@ -51,44 +51,34 @@ class CommandRouter {
     joinGame(req: Request, res: Response) {
         const playerId = req.body.user_id;
 
-        return Promise.try(() => {
-            addPlayer(playerId);
-            bot.getUserById(playerId)
-                .then(player => {
-                    bot.postPublicMessage(`${player.name} has joined.`);
-                });
-            res.json({ text: 'You are now signed up!' });
-        }).catch(e => {
-            res.json({ text: e.message });
-        });
+        return addPlayer(playerId)
+            .then(() => {
+                return res.json({ text: 'You are now signed up!' });
+            }).catch(e => {
+                return res.json({ text: e.message });
+            });
     }
 
     unJoinGame(req: Request, res: Response) {
         const playerId = req.body.user_id;
 
-        return Promise.try(() => {
-            removePlayer(playerId);
-            bot.getUserById(playerId)
-                .then(player => {
-                    bot.postPublicMessage(`${player.name} has left.`);
-                });
-            res.json({ text: 'You are no longer signed up!' });
-        }).catch(e => {
-            res.json({ text: e.message });
-        });
+        return removePlayer(playerId)
+            .then(() => {
+                return res.json({ text: 'You are no longer signed up!' });
+            }).catch(e => {
+                return res.json({ text: e.message });
+            });
     }
 
     setSetup(req: Request, res: Response) {
         const setupTag = req.body.text;
 
-        return Promise.try(() => {
-            const setup = setSetup(setupTag);
-            bot.postPublicMessage(`Setup was changed to ${setup[':name']} (${setup[':slots'].length} players)`);
-
-            res.json({ text: 'Setup changed!' });
-        }).catch(e => {
-            res.json({ text: e.message });
-        });
+        return setSetup(setupTag)
+            .then(() => {
+                return res.json({ text: 'Setup changed!' });
+            }).catch(e => {
+                return res.json({ text: e.message });
+            });
     }
 
     makeVote(req: Request, res: Response) {
@@ -98,12 +88,13 @@ class CommandRouter {
 
         return bot.getUserId(voteeName)
             .then(voteeId => {
-                setVote({ voterId, voteeId });
-                bot.postPublicMessage(`${voterName} is now voting ${voteeName}.`);
-                res.json({ text: "Vote set!" });
+                return setVote({ voterId, voteeId });
+            })
+            .then(() => {
+                return res.json({ text: "Vote set!" });
             })
             .catch(e => {
-                res.json({ text: e.message });
+                return res.json({ text: e.message });
             });
     }
 
@@ -111,13 +102,12 @@ class CommandRouter {
         const voterId = req.body.user_id;
         const voterName = req.body.user_name;
 
-        return Promise.try(() => {
-            setVote({ voterId });
-            bot.postPublicMessage(`${voterName} is no longer voting.`);
-            res.json({ text: "Vote cleared!" });
-        }).catch(e => {
-            res.json({ text: e.message });
-        });
+        return setVote({ voterId })
+            .then(() => {
+                return res.json({ text: "Vote cleared!" });
+            }).catch(e => {
+                return res.json({ text: e.message });
+            });
     }
 
     submitAction(req: Request, res: Response) {
@@ -127,21 +117,23 @@ class CommandRouter {
 
         return Promise.try(() => targetName ? bot.getUserId(targetName) : null)
             .then(targetId => {
-                addOrReplaceAction(actorId, actionName, targetId, targetName);
-                res.json({ text: "Confirming: ${actionName} on ${targetName}" });
+                return addOrReplaceAction(actorId, actionName, targetId, targetName);
+            })
+            .then(() => {
+                return res.json({ text: "Confirming: ${actionName} on ${targetName}" });
             })
             .catch(e => {
-                res.json({ text: e.message });
+                return res.json({ text: e.message });
             });
     }
 
     requestVotecount(req: Request, res: Response) {
-        return Promise.try(() => {
-            doVoteCount();
-            res.json({ text: "Ok!" });
-        }).catch(e => {
-            res.json({ text: e.message });
-        });
+        return doVoteCount()
+            .then(() => {
+                return res.json({ text: "Ok!" });
+            }).catch(e => {
+                return res.json({ text: e.message });
+            });
     }
 }
 

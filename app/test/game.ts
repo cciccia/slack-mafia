@@ -60,6 +60,9 @@ function buildGroupInviteCall(id) {
     @test setSetup() {
         return clients[0].doSlashCommand('/setup', 'boring')
             .then(() => {
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                const sCalls = slackMock.slashCommands.calls;
+
                 const setup = gamestate.getCurrentSetup();
                 should.exist(setup);
                 setup.should.eql(edn.parse(['{:name "Boring 3p"',
@@ -78,12 +81,9 @@ function buildGroupInviteCall(id) {
             .then(() => {
                 return Promise.all(clients.map(client => client.doSlashCommand('/in')));
             })
-            .then(() => Promise.delay(500))
             .then(() => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
-                const sCalls = slackMock.slashCommands.calls.map(call => call.params);
-
-                console.log(wCalls);
+                const sCalls = slackMock.slashCommands.calls;
 
                 const players = Array.from(gamestate.getPlayers().entries());
                 players.map(player => player[0]).should.not.eql(clients.map(client => client.id));
@@ -107,6 +107,29 @@ function buildGroupInviteCall(id) {
                 });
 
                 wCalls.should.deep.contain(buildChatCall(bot.channels[0].id, `It is now Day 1.`));
+            });
+    }
+
+    @test votesAndLynch() {
+        return clients[0].doSlashCommand('/setup', 'bird')
+            .then(() => {
+                return Promise.all(clients.map(client => client.doSlashCommand('/in')));
+            })
+            .then(() => {
+                const players = Array.from(gamestate.getPlayers().entries());
+
+                clients[0].doSlashCommand('/vote', clients[6].name);
+                clients[1].doSlashCommand('/vote', clients[6].name);
+                clients[2].doSlashCommand('/vote', clients[6].name);
+                return clients[3].doSlashCommand('/vc');
+            })
+            .then(() => {
+                //const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                //const sCalls = slackMock.slashCommands.calls;
+
+                // wCalls[-1].should.eql(buildChatCall(bot.channels[0].id, [
+                //     'Votecount:',
+                //     `[3] HyHyWBCFKW: (rJJZBCKtb, rygkWHAtY-, HJ-1brRKKZ)
             });
     }
 }
