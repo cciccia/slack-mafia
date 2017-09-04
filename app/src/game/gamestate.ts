@@ -355,8 +355,8 @@ export function setVote({ voterId, voteeId }: Vote) {
                 setTimeout(endNight, 300000);  //TODO parametrize?
 
                 const message: string[] = [];
-                message.push(`${userMap.get(lyncheeId).name} was lynched.They were a ${slot.name}.`);
-                message.push(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
+                message.push(`${userMap.get(lyncheeId).name} was lynched. They were a ${slot.name}.`);
+                message.push(`It is now Night ${currentPhase.num}. Night will last 5 minutes.`);
 
                 return bot.postPublicMessage(message.join('\n'));
             }

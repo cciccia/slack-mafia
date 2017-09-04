@@ -110,14 +110,12 @@ function buildGroupInviteCall(id) {
             });
     }
 
-    @test votesAndLynch() {
+    @test votes() {
         return clients[0].doSlashCommand('/setup', 'bird')
             .then(() => {
                 return Promise.all(clients.map(client => client.doSlashCommand('/in')));
             })
             .then(() => {
-                const players = Array.from(gamestate.getPlayers().entries());
-
                 clients[0].doSlashCommand('/vote', clients[6].name);
                 clients[1].doSlashCommand('/vote', clients[6].name);
                 clients[2].doSlashCommand('/vote', clients[6].name);
@@ -149,6 +147,27 @@ function buildGroupInviteCall(id) {
                     `[4] Not Voting: (${clients[3].name}, ${clients[4].name}, ${clients[6].name}, ${clients[1].name})`,
                     '',
                     `With 7 alive, it is 4 to lynch.`
+                ].join('\n')));
+            });
+    }
+
+    @test lynchScene() {
+        return clients[0].doSlashCommand('/setup', 'bird')
+            .then(() => {
+                return Promise.all(clients.map(client => client.doSlashCommand('/in')));
+            })
+            .then(() => {
+                clients[0].doSlashCommand('/vote', clients[6].name);
+                clients[1].doSlashCommand('/vote', clients[6].name);
+                clients[2].doSlashCommand('/vote', clients[6].name);
+                return clients[3].doSlashCommand('/vote', clients[6].name);
+            })
+            .then(() => {
+                const players = gamestate.getPlayers();
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                    `${clients[6].name} was lynched. They were a ${players.get(clients[6].id).name}.`,
+                    `It is now Night 1. Night will last 5 minutes.`
                 ].join('\n')));
             });
     }
