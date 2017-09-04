@@ -121,16 +121,32 @@ function buildGroupInviteCall(id) {
                 clients[0].doSlashCommand('/vote', clients[6].name);
                 clients[1].doSlashCommand('/vote', clients[6].name);
                 clients[2].doSlashCommand('/vote', clients[6].name);
+
                 return clients[3].doSlashCommand('/vc');
             })
             .then(() => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
-                const sCalls = slackMock.slashCommands.calls;
 
                 wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
                     'Votecount:',
                     `[3] ${clients[6].name}: (${clients[0].name}, ${clients[1].name}, ${clients[2].name})`,
                     `[4] Not Voting: (${clients[3].name}, ${clients[4].name}, ${clients[5].name}, ${clients[6].name})`,
+                    '',
+                    `With 7 alive, it is 4 to lynch.`
+                ].join('\n')));
+
+                clients[1].doSlashCommand('/unvote');
+                clients[5].doSlashCommand('/vote', clients[3].name);
+                clients[2].doSlashCommand('/vote', clients[3].name);
+                return clients[4].doSlashCommand('/vc');
+            })
+            .then(() => {
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                    'Votecount:',
+                    `[2] ${clients[3].name}: (${clients[5].name}, ${clients[2].name})`,
+                    `[1] ${clients[6].name}: (${clients[0].name})`,
+                    `[4] Not Voting: (${clients[3].name}, ${clients[4].name}, ${clients[6].name}, ${clients[1].name})`,
                     '',
                     `With 7 alive, it is 4 to lynch.`
                 ].join('\n')));

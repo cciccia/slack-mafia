@@ -43,7 +43,7 @@ let playerSlots = new Map<string, Slot>();
 
 // global temporary state
 let currentActions: Action[] = [];
-let currentVotes = new Map<string, string>();
+let currentVotes: Map<string, string[]>;
 
 function requirePlaying(playerId: string): void {
     if (!playerSlots.has(playerId)) {
@@ -67,7 +67,7 @@ export function reset(): void {
     playerSlots.clear();
 
     currentActions.length = 0;
-    currentVotes.clear();
+    initVotes();
 
 }
 
@@ -133,6 +133,7 @@ function startGame() {
 
     return Promise.all([createPrivateChannels(), sendRoles()])
         .then(() => {
+            initVotes();
             changePhase({ time: TimeOfDay.Day, num: 1 });
             return bot.postPublicMessage(`It is now Day 1.`);
         });
@@ -168,9 +169,9 @@ function sendRoles() {
 
 function changePhase(phase: Phase): void {
     currentPhase = phase;
+    initVotes();
 
     for (const playerId of playerIds) {
-        currentVotes.set(playerId, NOT_VOTING);
         if (playerSlots.has(playerId)) {
             playerSlots.get(playerId).resetMutableState();
         }
@@ -275,38 +276,38 @@ export function getPhase(): Phase {
     return currentPhase;
 }
 
-function getVc() {
-    const vc = Array.from(currentVotes.entries()).reduce((acc, [voterId, voteeId]) => {
-        let entry = acc.find(([vcVoteeId, vcVotesId]) => voteeId === vcVoteeId);
-        if (!entry) {
-            entry = [voteeId, []];
-            acc.push(entry);
-        }
-        entry[1].push(voterId);
+function getVc(): any[] {
+    return Array.from(currentVotes.entries()).reduce((acc, [voteeId, votes]) => {
+        acc.push([voteeId, votes]);
         return acc;
-    }, []);
-
-    // Not Voting should always be listed last.
-    return vc.sort((a, b) => {
-        if (a[0] === NOT_VOTING) {
-            return 1;
-        } else if (b[0] === NOT_VOTING) {
-            return -1;
-        } else {
-            return b[1].length - a[1].length;
-        }
-    });
+    }, [])
+        .filter(([voteeId, votes]) => votes.length > 0)
+        .sort((a, b) => {
+            if (a[0] === NOT_VOTING) {
+                return 1;
+            } else if (b[0] === NOT_VOTING) {
+                return -1;
+            } else {
+                return b[1].length - a[1].length;
+            }
+        });
 }
 
 function getLivingPlayers(): number {
     return playerIds.filter(playerId => playerSlots.get(playerId).isAlive).length;
 }
 
-function clearVotes(): void {
-    currentVotes.clear();
-    for (const voterId of playerIds) {
-        currentVotes.set(voterId, NOT_VOTING);
-    }
+function initVotes(): void {
+    currentVotes = playerIds.reduce((acc, playerId) => {
+        acc.set(playerId, []);
+        return acc;
+    }, new Map<string, string[]>());
+
+    currentVotes.set(NOT_VOTING, []);
+
+    playerIds.forEach(playerId => {
+        currentVotes.get(NOT_VOTING).push(playerId);
+    });
 }
 
 export function setVote({ voterId, voteeId }: Vote) {
@@ -318,7 +319,14 @@ export function setVote({ voterId, voteeId }: Vote) {
         voteeId = NOT_VOTING;
     }
 
-    currentVotes.set(voterId, voteeId);
+    for (const [votee, votes] of currentVotes) {
+        const idx = votes.indexOf(voterId);
+        if (idx > -1) {
+            votes.splice(idx, 1);
+        }
+    }
+
+    currentVotes.get(voteeId).push(voterId);
 
     return getPlayerUserMap()
         .then(userMap => {
@@ -410,7 +418,7 @@ function endNight() {
     changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
     bot.postPublicMessage(`It is now Day ${currentPhase.num}`)
         .then(() => {
-            clearVotes();
+            initVotes();
             doVoteCount();
         });
 }
