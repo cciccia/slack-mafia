@@ -124,12 +124,16 @@ function buildGroupInviteCall(id) {
                 return clients[3].doSlashCommand('/vc');
             })
             .then(() => {
-                //const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
-                //const sCalls = slackMock.slashCommands.calls;
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                const sCalls = slackMock.slashCommands.calls;
 
-                // wCalls[-1].should.eql(buildChatCall(bot.channels[0].id, [
-                //     'Votecount:',
-                //     `[3] HyHyWBCFKW: (rJJZBCKtb, rygkWHAtY-, HJ-1brRKKZ)
+                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                    'Votecount:',
+                    `[3] ${clients[6].name}: (${clients[0].name}, ${clients[1].name}, ${clients[2].name})`,
+                    `[4] Not Voting: (${clients[3].name}, ${clients[4].name}, ${clients[5].name}, ${clients[6].name})`,
+                    '',
+                    `With 7 alive, it is 4 to lynch.`
+                ].join('\n')));
             });
     }
 }

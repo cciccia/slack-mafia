@@ -322,7 +322,7 @@ export function setVote({ voterId, voteeId }: Vote) {
 
     return getPlayerUserMap()
         .then(userMap => {
-            if (voteeId === NOT_VOTING) {
+            if (voteeId !== NOT_VOTING) {
                 return Promise.all([
                     userMap,
                     bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${userMap.get(voteeId).name}.`)
@@ -339,21 +339,19 @@ export function setVote({ voterId, voteeId }: Vote) {
 
             const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
-            const message: string[] = [];
-
             //a lynch has been reached.
-            if (lyncheeId) {
+            if (lyncheeId && (lyncheeId !== NOT_VOTING)) {
                 const slot = playerSlots.get(lyncheeId);
                 slot.die();
+                changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
+                setTimeout(endNight, 300000);  //TODO parametrize?
+
+                const message: string[] = [];
                 message.push(`${userMap.get(lyncheeId).name} was lynched.They were a ${slot.name}.`);
                 message.push(`It is now ${currentPhase.time} ${currentPhase.num}. Night will last 5 minutes.`);
 
                 return bot.postPublicMessage(message.join('\n'));
             }
-        })
-        .then(() => {
-            setTimeout(endNight, 300000);  //TODO parametrize?
-            return changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
         });
 }
 
@@ -367,13 +365,23 @@ export function doVoteCount() {
     return getPlayerUserMap()
         .then(userMap => {
             vc.forEach(([voteeId, votes]) => {
-                message.push(`[${votes.length}] ${userMap.get(voteeId).name}: (${votes.map(vote => userMap.get(vote).name).join(', ')})`);
+                if (voteeId !== NOT_VOTING) {
+                    message.push([
+                        `[${votes.length}] ${userMap.get(voteeId).name}: `,
+                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
+                    ].join(''));
+                } else {
+                    message.push([
+                        `[${votes.length}] ${NOT_VOTING}: `,
+                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
+                    ].join(''));
+                }
             });
 
             message.push('');
             message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
 
-            bot.postPublicMessage(message.join('\n'));
+            return bot.postPublicMessage(message.join('\n'));
         });
 }
 
