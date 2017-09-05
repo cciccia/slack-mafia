@@ -45,6 +45,9 @@ let playerSlots = new Map<string, Slot>();
 let currentActions: Action[] = [];
 let currentVotes: Map<string, string[]>;
 
+// night end handler;
+let nightEndTimeout;
+
 function requirePlaying(playerId: string): void {
     if (!playerSlots.has(playerId)) {
         throw new Error('You are not currently playing!');
@@ -60,6 +63,10 @@ function getPlayerUserMap() {
 }
 
 export function reset(): void {
+    if (nightEndTimeout) {
+        clearTimeout(nightEndTimeout);
+    }
+
     changePhase({ time: TimeOfDay.WaitingForPlayers });
     currentGameId = undefined;
 
@@ -137,9 +144,12 @@ function startGame() {
 
     return Promise.all([createPrivateChannels(), sendRoles()])
         .then(() => {
-            initVotes();
             changePhase({ time: TimeOfDay.Day, num: 1 });
-            return bot.postPublicMessage(`It is now Day 1.`);
+            return bot.postPublicMessage(`It is now Day 1.`)
+                .then(() => {
+                    initVotes();
+                    doVoteCount();
+                });
         });
 }
 
@@ -231,47 +241,49 @@ export function addOrReplaceAction(actorId: string, actionName: string, targetId
 }
 
 function addOrReplaceFormattedAction(action: Action) {
-    const abilityDef = abilityFactory(action.abilityType);
+    return Promise.try(() => {
+        const abilityDef = abilityFactory(action.abilityType);
 
-    if (!validate(action, currentPhase)) {
-        throw new Error('You are unable to perform this action.');
-    }
+        if (!validate(action, currentPhase)) {
+            throw new Error('You are unable to perform this action.');
+        }
 
-    //remove any previous actions by that player of that type
-    let dedupers = [action.actor.playerId];
+        //remove any previous actions by that player of that type
+        let dedupers = [action.actor.playerId];
 
-    //factional actions may only be performed by one faction member per night
-    if (abilityDef.activationType === AbilityActivationType.Factional) {
-        dedupers = _.filter(Array.from(playerSlots), ([player, slot]) => slot.alignment === action.actor.alignment)
-            .map(([player, slot]) => player);
-    }
+        //factional actions may only be performed by one faction member per night
+        if (abilityDef.activationType === AbilityActivationType.Factional) {
+            dedupers = _.filter(Array.from(playerSlots), ([player, slot]) => slot.alignment === action.actor.alignment)
+                .map(([player, slot]) => player);
+        }
 
-    // remove action overwritten by the new one received if any
-    _(currentActions)
-        .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.playerId))
-        .value();
+        // remove action overwritten by the new one received if any
+        _(currentActions)
+            .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.playerId))
+            .value();
 
-    // add new action
-    currentActions.push(action);
-    currentActions.sort((a, b) => {
-        return a.abilityType - b.abilityType;
+        // add new action
+        currentActions.push(action);
+        currentActions.sort((a, b) => {
+            return a.abilityType - b.abilityType;
+        });
+
+        if (factionChannels.has(action.actor.alignment)) {
+            return getPlayerUserMap()
+                .then(userMap => {
+                    return bot.postMessage(
+                        factionChannels.get(action.actor.alignment),
+                        getActionsForFaction(action.actor.alignment).map(action => {
+                            let a = `${userMap.get(action.actor.playerId).name} will ${actionDescriber(action.abilityType)}`;
+
+                            if (action.target) {
+                                a += ` ${userMap.get(action.target.playerId).name}`;
+                            }
+                            return a;
+                        }).join('\n'));
+                });
+        }
     });
-
-    if (factionChannels.has(action.actor.alignment)) {
-        return getPlayerUserMap()
-            .then(userMap => {
-                return bot.postMessage(
-                    factionChannels.get(action.actor.alignment),
-                    getActionsForFaction(action.actor.alignment).map(action => {
-                        let a = `${userMap.get(action.actor.playerId).name} will ${actionDescriber(action.abilityType)}`;
-
-                        if (action.target) {
-                            a += ` ${userMap.get(action.target.playerId).name}`;
-                        }
-                        return a;
-                    }).join('\n'));
-            });
-    }
 }
 
 export function getActionsForFaction(faction: Alignment): Action[] {
@@ -306,14 +318,18 @@ function getLivingPlayers(): number {
 }
 
 function initVotes(): void {
-    currentVotes = playerIds.reduce((acc, playerId) => {
-        acc.set(playerId, []);
-        return acc;
-    }, new Map<string, string[]>());
+    const livingPlayerIds = playerIds
+        .filter(playerId => playerSlots.has(playerId) && playerSlots.get(playerId).isAlive);
+
+    currentVotes = livingPlayerIds
+        .reduce((acc, playerId) => {
+            acc.set(playerId, []);
+            return acc;
+        }, new Map<string, string[]>());
 
     currentVotes.set(NOT_VOTING, []);
 
-    playerIds.forEach(playerId => {
+    livingPlayerIds.forEach(playerId => {
         currentVotes.get(NOT_VOTING).push(playerId);
     });
 }
@@ -360,11 +376,11 @@ export function setVote({ voterId, voteeId }: Vote) {
                 const slot = playerSlots.get(lyncheeId);
                 slot.die();
                 changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
-                setTimeout(endNight, 300000);  //TODO parametrize?
+                nightEndTimeout = setTimeout(endNight, parseInt(process.env.NIGHT_LENGTH, 10) * 1000);
 
                 const message: string[] = [];
                 message.push(`${userMap.get(lyncheeId).name} was lynched. They were a ${slot.name}.`);
-                message.push(`It is now Night ${currentPhase.num}. Night will last 5 minutes.`);
+                message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
 
                 return bot.postPublicMessage(message.join('\n'));
             }
@@ -402,31 +418,34 @@ export function doVoteCount() {
 }
 
 function endNight() {
-    // apply all passives
-    playerSlots.forEach(slot => {
+    const passivesToApply = [];
+    Array.from(playerSlots.values()).forEach(slot => {
         slot.abilities.forEach(ability => {
             const abilityDef = abilityFactory(ability.abilityType);
             if (abilityDef.activationType === AbilityActivationType.Passive) {
-                try {
-                    addOrReplaceFormattedAction({
-                        actor: slot,
-                        abilityType: ability.abilityType
-                    });
-                } finally { }
+                passivesToApply.push(addOrReplaceFormattedAction({
+                    actor: slot,
+                    abilityType: ability.abilityType
+                })
+                    .catch(e => { }));
             }
         });
     });
 
-    currentActions.forEach(action => {
-        const ability = abilityFactory(action.abilityType);
-        action.actor.consumeAbility(action.abilityType);
-        ability.resolve(action.actor, action.target);
-    });
-
-    changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
-    bot.postPublicMessage(`It is now Day ${currentPhase.num}`)
+    return Promise.all(passivesToApply)
         .then(() => {
-            initVotes();
-            doVoteCount();
+            return Promise.all(currentActions.map(action => {
+                const ability = abilityFactory(action.abilityType);
+                action.actor.consumeAbility(action.abilityType);
+                return Promise.resolve(ability.resolve(action.actor, action.target));
+            }));
+        })
+        .then(() => {
+            changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
+            return bot.postPublicMessage(`It is now Day ${currentPhase.num}`)
+                .then(() => {
+                    initVotes();
+                    doVoteCount();
+                });
         });
 }

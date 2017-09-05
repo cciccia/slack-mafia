@@ -115,7 +115,7 @@ class CommandRouter {
         const actorName = req.body.user_name;
         const [actionName, targetName] = req.body.text.split(' ');
 
-        return Promise.try(() => targetName ? bot.getUserId(targetName) : null)
+        return Promise.resolve(targetName ? bot.getUserId(targetName) : null)
             .then(targetId => {
                 return addOrReplaceAction(actorId, actionName, targetId, targetName);
             })

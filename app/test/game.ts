@@ -55,7 +55,21 @@ function performTimedCommands(commands) {
         Promise.delay(50 * i).then(() => client.doSlashCommand(command, params))));
 }
 
-@suite(slow(1000)) class Game {
+function getPlayersByRoleAndAlignment() {
+    const players = gamestate.getPlayers();
+
+    const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+    const mafia = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
+    const cop = town.find(client => players.get(client.id).name === 'Town Macho Cop');
+    const doctor = town.find(client => players.get(client.id).name === 'Town Doctor');
+    const vanilla = town.filter(client => client.id !== cop.id && client.id !== doctor.id);
+
+    return {
+        town, mafia, cop, doctor, vanilla
+    };
+}
+
+@suite(slow(1000), timeout(10000)) class Game {
     static before() {
         return require('./shared/server');
     }
@@ -97,11 +111,7 @@ function performTimedCommands(commands) {
                 const players = Array.from(gamestate.getPlayers().entries());
                 players.map(player => player[0]).should.not.eql(clients.map(client => client.id));
 
-                const town = players.filter(([id, slot]) => slot.alignment === constants.Alignment.Town);
-                const mafia = players.filter(([id, slot]) => slot.alignment === constants.Alignment.Mafia);
-                const cop = town.find(([id, slot]) => slot.name === 'Town Macho Cop');
-                const doctor = town.find(([id, slot]) => slot.name === 'Town Doctor');
-                const vanilla = town.filter(([id, slot]) => id !== cop[0] && id !== doctor[0]);
+                const { mafia } = getPlayersByRoleAndAlignment();
 
                 players.forEach(player => {
                     const channelId = bot.ims.find(im => im.user === player[0]).id;
@@ -115,7 +125,7 @@ function performTimedCommands(commands) {
 
                 mafia.forEach(mafioso => {
                     wCalls.should.deep.contain(buildGroupInviteCall(
-                        mafioso[0],
+                        mafioso.id,
                         factionChannels.get(constants.Alignment.Mafia)
                     ));
                 });
@@ -187,7 +197,7 @@ function performTimedCommands(commands) {
 
                 wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
                     `${clients[6].name} was lynched. They were a ${players.get(clients[6].id).name}.`,
-                    `It is now Night 1. Night will last 5 minutes.`
+                    `It is now Night 1. Night will last ${process.env.NIGHT_LENGTH} seconds.`
                 ].join('\n')));
             });
     }
@@ -199,8 +209,7 @@ function performTimedCommands(commands) {
             })
             .then(() => {
                 const players = gamestate.getPlayers();
-                const [mafiaA, mafiaB] = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
-                const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+                const { town, mafia } = getPlayersByRoleAndAlignment();
 
                 return performTimedCommands([
                     [clients[0], '/vote', town[4].name],
@@ -210,26 +219,59 @@ function performTimedCommands(commands) {
                 ]);
             })
             .then(() => {
-                const players = gamestate.getPlayers();
-                const [mafiaA, mafiaB] = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
-                const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+                const { town, mafia } = getPlayersByRoleAndAlignment();
 
                 return performTimedCommands([
-                    [mafiaA, '/act', `kill ${town[0].name}`],
-                    [mafiaB, '/act', `kill ${town[1].name}`]
+                    [mafia[0], '/act', `kill ${town[0].name}`],
+                    [mafia[1], '/act', `kill ${town[1].name}`]
                 ]);
             })
             .then(() => {
-                const players = gamestate.getPlayers();
-                const [mafiaA, mafiaB] = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
-                const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+                const { town, mafia } = getPlayersByRoleAndAlignment();
                 const sCalls = slackMock.slashCommands.calls;
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
                 const factionChannels = gamestate.getFactionChannels();
 
                 wCalls.slice(-1)[0].should.eql(buildChatCall(factionChannels.get(constants.Alignment.Mafia),
-                    `${mafiaB.name} will kill ${town[1].name}`));
+                    `${mafia[1].name} will kill ${town[1].name}`));
 
+            });
+    }
+
+    @test nightActionResolution() {
+        return clients[0].doSlashCommand('/setup', 'bird')
+            .then(() => {
+                return Promise.all(clients.map(client => client.doSlashCommand('/in')));
+            })
+            .then(() => {
+                const { vanilla } = getPlayersByRoleAndAlignment();
+
+                return performTimedCommands([
+                    [clients[0], '/vote', vanilla[2].name],
+                    [clients[1], '/vote', vanilla[2].name],
+                    [clients[2], '/vote', vanilla[2].name],
+                    [clients[3], '/vote', vanilla[2].name]
+                ]);
+            })
+            .then(() => {
+                const { town, mafia, cop, doctor, vanilla } = getPlayersByRoleAndAlignment();
+                return performTimedCommands([
+                    [mafia[0], '/act', `kill ${cop.name}`],
+                    [doctor, '/act', `protect ${cop.name}`],
+                    [cop, '/act', `investigate ${mafia[0].name}`]
+                ]);
+            })
+            .then(() => {
+                return Promise.delay(6000);
+            })
+            .then(() => {
+                const sCalls = slackMock.slashCommands.calls;
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+
+                const players = gamestate.getPlayers();
+                const { town, mafia, cop, doctor, vanilla } = getPlayersByRoleAndAlignment();
+
+                players.get(cop.id).isAlive.should.be.false;
             });
     }
 }

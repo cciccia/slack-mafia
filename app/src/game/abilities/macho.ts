@@ -5,6 +5,6 @@ export default {
     activationType: AbilityActivationType.Passive,
 
     resolve(actor: Slot, target: Slot): void {
-        target.isProtectImmune = true;
+        actor.isProtectImmune = true;
     }
 };
