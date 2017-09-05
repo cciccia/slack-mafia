@@ -1,7 +1,13 @@
 import { ParityType, AbilityType, TimeOfDay } from '../constants';
 import { Phase } from './gamestate';
 import { Slot } from './slot';
+
+
 import Cop from './abilities/cop';
+import Doctor from './abilities/doctor';
+import FactionalKill from './abilities/factionalKill';
+import Macho from './abilities/macho';
+
 
 export interface AbilityUsage {
     charges: number;
@@ -47,8 +53,14 @@ export function abilityFactory(abilityType: AbilityType) {
     switch (abilityType) {
         case AbilityType.Cop:
             return Cop;
+        case AbilityType.Doctor:
+            return Doctor;
+        case AbilityType.FactionalKill:
+            return FactionalKill;
+        case AbilityType.Macho:
+            return Macho;
         default:
-            throw "Bad stop";
+            throw new Error(`No ability definition found for ${abilityType}`);
     }
 }
 

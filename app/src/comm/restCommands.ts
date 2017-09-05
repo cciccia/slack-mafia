@@ -16,10 +16,10 @@ export function createPrivateChannel(name: string, users: string[]) {
                 .set('Content-Type', 'application/x-www-form-urlencoded')
                 .send({
                     token: process.env.SLACK_API_TOKEN,
-                    channel: response.id,
+                    channel: response.body.group.id,
                     user
                 })))
-                .then(() => response.id);
+                .then(() => response.body.group.id);
         });
 }
 

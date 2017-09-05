@@ -1,6 +1,6 @@
 import { slackMockForUsers } from './shared/slackMock';
 
-const { slackMock, clients } = slackMockForUsers(7);
+const { slackMock, addCustomResponses, clients } = slackMockForUsers(7);
 
 import { suite, test, slow, timeout } from "mocha-typescript";
 import * as chai from 'chai';
@@ -37,17 +37,25 @@ function buildGroupCreateCall(name) {
     };
 }
 
-function buildGroupInviteCall(id) {
+function buildGroupInviteCall(id, channelId) {
     return {
         url: `${process.env.SLACK_API_URL}/groups.invite`,
         params: {
             user: id,
-            token: process.env.SLACK_API_TOKEN,
+            channel: channelId,
+            token: process.env.SLACK_API_TOKEN
         }
     };
 }
 
-@suite class Game {
+function performTimedCommands(commands) {
+    const promises = [];
+
+    return Promise.all(commands.map(([client, command, params], i) =>
+        Promise.delay(50 * i).then(() => client.doSlashCommand(command, params))));
+}
+
+@suite(slow(1000)) class Game {
     static before() {
         return require('./shared/server');
     }
@@ -55,6 +63,7 @@ function buildGroupInviteCall(id) {
     before() {
         gamestate.reset();
         slackMock.reset();
+        addCustomResponses();
     }
 
     @test setSetup() {
@@ -102,8 +111,13 @@ function buildGroupInviteCall(id) {
 
                 wCalls.should.deep.contain(buildGroupCreateCall(`Mafia-${gamestate.getGameId()}`));
 
+                const factionChannels = gamestate.getFactionChannels();
+
                 mafia.forEach(mafioso => {
-                    wCalls.should.deep.contain(buildGroupInviteCall(mafioso[0]));
+                    wCalls.should.deep.contain(buildGroupInviteCall(
+                        mafioso[0],
+                        factionChannels.get(constants.Alignment.Mafia)
+                    ));
                 });
 
                 wCalls.should.deep.contain(buildChatCall(bot.channels[0].id, `It is now Day 1.`));
@@ -116,13 +130,14 @@ function buildGroupInviteCall(id) {
                 return Promise.all(clients.map(client => client.doSlashCommand('/in')));
             })
             .then(() => {
-                clients[0].doSlashCommand('/vote', clients[6].name);
-                clients[1].doSlashCommand('/vote', clients[6].name);
-                clients[2].doSlashCommand('/vote', clients[6].name);
-
-                return clients[3].doSlashCommand('/vc');
+                return performTimedCommands([
+                    [clients[0], '/vote', clients[6].name],
+                    [clients[1], '/vote', clients[6].name],
+                    [clients[2], '/vote', clients[6].name],
+                    [clients[3], '/vc']
+                ]);
             })
-            .then(() => {
+            .then(result => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
 
                 wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
@@ -133,10 +148,12 @@ function buildGroupInviteCall(id) {
                     `With 7 alive, it is 4 to lynch.`
                 ].join('\n')));
 
-                clients[1].doSlashCommand('/unvote');
-                clients[5].doSlashCommand('/vote', clients[3].name);
-                clients[2].doSlashCommand('/vote', clients[3].name);
-                return clients[4].doSlashCommand('/vc');
+                return performTimedCommands([
+                    [clients[1], '/unvote'],
+                    [clients[5], '/vote', clients[3].name],
+                    [clients[2], '/vote', clients[3].name],
+                    [clients[4], '/vc']
+                ]);
             })
             .then(() => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
@@ -157,18 +174,62 @@ function buildGroupInviteCall(id) {
                 return Promise.all(clients.map(client => client.doSlashCommand('/in')));
             })
             .then(() => {
-                clients[0].doSlashCommand('/vote', clients[6].name);
-                clients[1].doSlashCommand('/vote', clients[6].name);
-                clients[2].doSlashCommand('/vote', clients[6].name);
-                return clients[3].doSlashCommand('/vote', clients[6].name);
+                return performTimedCommands([
+                    [clients[0], '/vote', clients[6].name],
+                    [clients[1], '/vote', clients[6].name],
+                    [clients[2], '/vote', clients[6].name],
+                    [clients[3], '/vote', clients[6].name]
+                ]);
             })
             .then(() => {
                 const players = gamestate.getPlayers();
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+
                 wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
                     `${clients[6].name} was lynched. They were a ${players.get(clients[6].id).name}.`,
                     `It is now Night 1. Night will last 5 minutes.`
                 ].join('\n')));
+            });
+    }
+
+    @test factionalActionReporting() {
+        return clients[0].doSlashCommand('/setup', 'bird')
+            .then(() => {
+                return Promise.all(clients.map(client => client.doSlashCommand('/in')));
+            })
+            .then(() => {
+                const players = gamestate.getPlayers();
+                const [mafiaA, mafiaB] = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
+                const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+
+                return performTimedCommands([
+                    [clients[0], '/vote', town[4].name],
+                    [clients[1], '/vote', town[4].name],
+                    [clients[2], '/vote', town[4].name],
+                    [clients[3], '/vote', town[4].name]
+                ]);
+            })
+            .then(() => {
+                const players = gamestate.getPlayers();
+                const [mafiaA, mafiaB] = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
+                const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+
+                return performTimedCommands([
+                    [mafiaA, '/act', `kill ${town[0].name}`],
+                    [mafiaB, '/act', `kill ${town[1].name}`]
+                ]);
+            })
+            .then(() => {
+                const players = gamestate.getPlayers();
+                const [mafiaA, mafiaB] = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
+                const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+                const sCalls = slackMock.slashCommands.calls;
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                const factionChannels = gamestate.getFactionChannels();
+
+                wCalls.slice(-1)[0].should.eql(buildChatCall(factionChannels.get(constants.Alignment.Mafia),
+                    `${mafiaB.name} will kill ${town[1].name}`));
+
             });
     }
 }

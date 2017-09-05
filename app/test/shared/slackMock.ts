@@ -34,24 +34,38 @@ export function slackMockForUsers(numUsers: number) {
 
     const clients = Array.from({ length: numUsers }, (value, key) => key).map(userNum => clientFactory(userNum.toString()));
 
-    slackMock.web.addResponse({
-        url: `${process.env.SLACK_API_URL}/rtm.start`,
-        statusCode: 200,
-        body: {
-            ok: true,
-            channels: [
-                {
-                    id: shortId.generate(),
-                    name: process.env.SLACK_GAME_CHANNEL
+    function addCustomResponses() {
+        slackMock.web.addResponse({
+            url: `${process.env.SLACK_API_URL}/rtm.start`,
+            statusCode: 200,
+            body: {
+                ok: true,
+                channels: [
+                    {
+                        id: shortId.generate(),
+                        name: process.env.SLACK_GAME_CHANNEL
+                    }
+                ],
+                users: clients.map(client => ({ id: client.id, name: client.name })),
+                ims: clients.map(client => ({ id: shortId.generate(), user: client.id }))
+            }
+        });
+        slackMock.web.addResponse({
+            url: `${process.env.SLACK_API_URL}/groups.create`,
+            statusCode: 200,
+            body: {
+                ok: true,
+                group: {
+                    id: shortId.generate()
                 }
-            ],
-            users: clients.map(client => ({ id: client.id, name: client.name })),
-            ims: clients.map(client => ({ id: shortId.generate(), user: client.id }))
-        }
-    });
+            }
+        });
+    }
+    addCustomResponses();
 
     return {
         slackMock,
-        clients
+        clients,
+        addCustomResponses
     };
 }

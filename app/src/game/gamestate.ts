@@ -87,6 +87,10 @@ export function getCurrentSetup(): any {
     return currentSetup;
 }
 
+export function getFactionChannels(): Map<Alignment, string> {
+    return factionChannels;
+}
+
 export function setSetup(tag: string): any {
     return Promise.try(() => {
         if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
@@ -213,22 +217,20 @@ export function removePlayer(playerId: string) {
 }
 
 export function addOrReplaceAction(actorId: string, actionName: string, targetId: string, targetName: string) {
-    return Promise.try(() => {
-        requirePlaying(actorId);
+    requirePlaying(actorId);
 
-        if (!playerSlots.has(targetId)) {
-            throw new Error(`${targetName} is not currently playing!`);
-        }
+    if (!playerSlots.has(targetId)) {
+        throw new Error(`${targetName} is not currently playing!`);
+    }
 
-        addOrReplaceFormattedAction({
-            actor: playerSlots.get(actorId),
-            abilityType: actionResolver(actionName),
-            target: targetId == null ? null : playerSlots.get(targetId)
-        });
+    return addOrReplaceFormattedAction({
+        actor: playerSlots.get(actorId),
+        abilityType: actionResolver(actionName),
+        target: targetId == null ? null : playerSlots.get(targetId)
     });
 }
 
-function addOrReplaceFormattedAction(action: Action): void {
+function addOrReplaceFormattedAction(action: Action) {
     const abilityDef = abilityFactory(action.abilityType);
 
     if (!validate(action, currentPhase)) {
@@ -246,7 +248,8 @@ function addOrReplaceFormattedAction(action: Action): void {
 
     // remove action overwritten by the new one received if any
     _(currentActions)
-        .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.playerId));
+        .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.playerId))
+        .value();
 
     // add new action
     currentActions.push(action);
@@ -255,14 +258,19 @@ function addOrReplaceFormattedAction(action: Action): void {
     });
 
     if (factionChannels.has(action.actor.alignment)) {
-        bot.postPublicMessage(factionChannels.get(action.actor.alignment), getActionsForFaction(action.actor.alignment).map(action => {
-            let a = `${action.actor} will ${actionDescriber(action.abilityType)}`;
+        return getPlayerUserMap()
+            .then(userMap => {
+                return bot.postMessage(
+                    factionChannels.get(action.actor.alignment),
+                    getActionsForFaction(action.actor.alignment).map(action => {
+                        let a = `${userMap.get(action.actor.playerId).name} will ${actionDescriber(action.abilityType)}`;
 
-            if (action.target) {
-                a += ` ${action.target}`;
-            }
-            return a;
-        }).join('\n'));
+                        if (action.target) {
+                            a += ` ${userMap.get(action.target.playerId).name}`;
+                        }
+                        return a;
+                    }).join('\n'));
+            });
     }
 }
 

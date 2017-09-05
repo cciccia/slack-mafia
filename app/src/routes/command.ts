@@ -120,7 +120,7 @@ class CommandRouter {
                 return addOrReplaceAction(actorId, actionName, targetId, targetName);
             })
             .then(() => {
-                return res.json({ text: "Confirming: ${actionName} on ${targetName}" });
+                return res.json({ text: `Confirming: ${actionName} on ${targetName}` });
             })
             .catch(e => {
                 return res.json({ text: e.message });
