@@ -6,18 +6,10 @@ services:
       - "18000:3000"
     env_file:
       - env/development.env
-    depends_on:
-      - postgres
     command: ["npm", "run", "watch"]
     volumes:
       - ./app:/src/app
       - modules:/src/app/node_modules
-  postgres:
-    image: postgres:9.6.3
-    ports:
-      - "15432:5432"
-    volumes:
-      - ./data:/var/lib/postgresql/data
 
 volumes:
   modules:
