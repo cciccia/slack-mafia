@@ -1,0 +1,23 @@
+image: gitlab/dind:latest
+
+services:
+- docker:dind
+
+stages:
+- test
+- build
+
+variables:
+  CONTAINER_RELEASE_IMAGE: gitlab.madisonhub.org:4567/you/yourproject:$CI_BUILD_REF_NAME
+
+test:
+  stage: test
+  script:
+    - docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+
+build:
+  stage: build
+  script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN gitlab.madisonhub.org:4567
+    - docker build -t $CONTAINER_RELEASE_IMAGE ./app
+    - docker push $CONTAINER_RELEASE_IMAGE
