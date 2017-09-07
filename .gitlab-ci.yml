@@ -22,7 +22,7 @@ release:
   stage: release
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN gitlab.madisonhub.org:4567
-    - docker build -t $CONTAINER_RELEASE_IMAGE ./app
+    - docker build -t $CONTAINER_RELEASE_IMAGE -f ./app/Dockerfile-stage ./app
     - docker push $CONTAINER_RELEASE_IMAGE
   only:
     - master   
