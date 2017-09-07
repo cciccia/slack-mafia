@@ -55,6 +55,7 @@ class CommandRouter {
             .then(() => {
                 return res.json({ text: 'You are now signed up!' });
             }).catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
@@ -66,6 +67,7 @@ class CommandRouter {
             .then(() => {
                 return res.json({ text: 'You are no longer signed up!' });
             }).catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
@@ -77,6 +79,7 @@ class CommandRouter {
             .then(() => {
                 return res.json({ text: 'Setup changed!' });
             }).catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
@@ -103,6 +106,7 @@ class CommandRouter {
             .then(() => {
                 return res.json({ text: "Vote cleared!" });
             }).catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
@@ -119,6 +123,7 @@ class CommandRouter {
                 return res.json({ text: `Confirming: ${actionName} on ${targetName}` });
             })
             .catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
@@ -128,6 +133,7 @@ class CommandRouter {
             .then(() => {
                 return res.json({ text: "Ok!" });
             }).catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
