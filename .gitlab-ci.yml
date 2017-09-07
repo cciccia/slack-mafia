@@ -5,7 +5,8 @@ services:
 
 stages:
 - test
-- build
+- release
+- deploy
 
 variables:
   CONTAINER_RELEASE_IMAGE: gitlab.madisonhub.org:4567/cciccia/slack-mafia:$CI_BUILD_REF_NAME
@@ -14,10 +15,23 @@ test:
   stage: test
   script:
     - docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+  only:
+    - develop
 
-build:
-  stage: build
+release:
+  stage: release
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN gitlab.madisonhub.org:4567
     - docker build -t $CONTAINER_RELEASE_IMAGE ./app
     - docker push $CONTAINER_RELEASE_IMAGE
+  only:
+    - master   
+
+deploy-stage-instance:
+  environment: production
+  stage: deploy
+  image: cdrx/rancher-gitlab-deploy
+  script:
+    - upgrade --rancher-url $RANCHER_URL --rancher-key $RANCHER_KEY --rancher-secret $RANCHER_SECRET --stack production --service slack-mafia --environment cciccia-Default
+  only:
+    - master
