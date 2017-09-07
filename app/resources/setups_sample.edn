@@ -8,4 +8,10 @@
           {:name "Town Doctor" :alignment #sm/enum :alignment/town :abilities [{:ability-type #sm/enum :ability-type/doctor}]}
           {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities [{:ability-type #sm/enum :ability-type/factional-kill}]}
           {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities [{:ability-type #sm/enum :ability-type/factional-kill}]}]
+  :has-day-talk false}
+ {:name "3p Simple"
+  :tag "simple"
+  :slots [{:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
+          {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities [{:ability-type #sm/enum :ability-type/factional-kill}]}]
   :has-day-talk false}]
