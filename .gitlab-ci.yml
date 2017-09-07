@@ -8,7 +8,7 @@ stages:
 - build
 
 variables:
-  CONTAINER_RELEASE_IMAGE: gitlab.madisonhub.org:4567/you/yourproject:$CI_BUILD_REF_NAME
+  CONTAINER_RELEASE_IMAGE: gitlab.madisonhub.org:4567/cciccia/slack-mafia:$CI_BUILD_REF_NAME
 
 test:
   stage: test
