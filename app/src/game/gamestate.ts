@@ -21,10 +21,12 @@ export interface Phase {
 
 export interface Vote {
     voterId: string;
-    voteeId?: string;
+    voteeName?: string;
 }
 
 const NOT_VOTING: string = 'Not Voting';
+const NO_LYNCH_NAME: string = 'no lynch';
+const NO_LYNCH_DISP: string = 'No Lynch';
 
 // game transcending state
 let currentSetup;
@@ -38,7 +40,6 @@ let currentPhase: Phase;
 
 // player info
 let playerIds: Array<string> = [];
-let playerUserData: Array<any>;
 let playerSlots = new Map<string, Slot>();
 
 // global temporary state
@@ -48,20 +49,203 @@ let currentVotes: Map<string, string[]>;
 // night end handler;
 let nightEndTimeout;
 
-function requirePlaying(playerId: string): void {
-    if (!playerSlots.has(playerId)) {
-        throw new Error('You are not currently playing!');
+// slash command entry points
+export function setSetup(tag: string): any {
+    return Promise.try(() => {
+        if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
+            const newSetup = getSetup(tag.toLowerCase());
+            if (newSetup) {
+                currentSetup = newSetup;
+                return bot.postPublicMessage(`Setup was changed to ${currentSetup[':name']} (${currentSetup[':slots'].length} players)`);
+            } else {
+                throw new Error(`${tag.toLowerCase()} is not a valid setup.`);
+            }
+        } else {
+            throw new Error(`Cannot change setup at this time.`);
+        }
+    });
+}
+
+export function addPlayer(playerId: string) {
+    return Promise.try(() => {
+        const idx = playerIds.indexOf(playerId);
+
+        if (playerIds.length >= currentSetup[':slots'].length) {
+            throw new Error("Game is full!");
+        } else if (idx === -1) {
+            playerIds.push(playerId);
+            return bot.getUserById(playerId)
+                .then(player => bot.postPublicMessage(`${player.name} has joined.`))
+                .then(() => {
+                    if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
+                        return startGame();
+                    }
+                });
+        } else {
+            throw new Error("You are already signed up!");
+        }
+    });
+}
+
+export function removePlayer(playerId: string) {
+    return Promise.try(() => {
+        const idx = playerIds.indexOf(playerId);
+        if (idx !== -1) {
+            playerIds.splice(idx, 1);
+            return bot.getUserById(playerId)
+                .then(player => bot.postPublicMessage(`${player.name} has left.`));
+        } else {
+            throw new Error("You are not currently signed up.");
+        }
+    });
+}
+
+export function doVoteCount() {
+    const vc = getVc();
+    const message: string[] = ['Votecount:'];
+
+    const livingPlayers = getLivingPlayerCount();
+    const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
+
+    return getPlayerUserMap()
+        .then(userMap => {
+            vc.forEach(([voteeId, votes]) => {
+                if (voteeId === NOT_VOTING) {
+                    message.push([
+                        `[${votes.length}] ${NOT_VOTING}: `,
+                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
+                    ].join(''));
+                } else if (voteeId === NO_LYNCH_NAME) {
+                    message.push([
+                        `[${votes.length}] ${NO_LYNCH_DISP}: `,
+                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
+                    ].join(''));
+                } else {
+                    message.push([
+                        `[${votes.length}] ${userMap.get(voteeId).name}: `,
+                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
+                    ].join(''));
+                }
+            });
+
+            message.push('');
+            message.push(`With ${getLivingPlayerCount()} alive, it is ${halfPlusOne} to lynch.`);
+
+            return bot.postPublicMessage(message.join('\n'));
+        });
+}
+
+export function addOrReplaceAction(actorId: string, actionName: string, targetName: string) {
+    requirePlaying(actorId);
+
+    return getPlayerUserMap()
+        .then(userMap => {
+
+            let targetId;
+            const target = Array.from(userMap.values()).find(user => user.name === targetName.toLowerCase());
+            if (target) {
+                targetId = target.id;
+            }
+
+            const livingPlayers = getLivingPlayers();
+
+            if (!targetId || !livingPlayers.find(livingPlayer => livingPlayer.playerId === targetId)) {
+                throw new Error(`No player ${targetName} is currently playing and alive.`);
+            }
+
+            return addOrReplaceFormattedAction({
+                actor: playerSlots.get(actorId),
+                abilityType: actionResolver(actionName),
+                target: targetId == null ? null : playerSlots.get(targetId)
+            });
+        });
+}
+
+export function setVote({ voterId, voteeName }: Vote) {
+    requirePlaying(voterId);
+
+    if (currentPhase.time !== TimeOfDay.Day) {
+        throw new Error("You cannot vote right now.");
     }
+
+    return getPlayerUserMap()
+        .then(userMap => {
+            let voteeId;
+
+            if (!voteeName) {
+                voteeId = NOT_VOTING;
+            } else if (voteeName.toLowerCase() === NO_LYNCH_NAME) {
+                voteeId = NO_LYNCH_NAME;
+            } else {
+                const votee = Array.from(userMap.values()).find(user => user.name === voteeName.toLowerCase());
+                if (votee) {
+                    voteeId = votee.id;
+                }
+                const livingPlayers = getLivingPlayers();
+                if (!voteeId || !livingPlayers.find(livingPlayer => livingPlayer.playerId === voteeId)) {
+                    throw new Error(`No player ${voteeName} is currently playing and alive.`);
+                }
+            }
+
+            for (const [votee, votes] of currentVotes) {
+                const idx = votes.indexOf(voterId);
+                if (idx > -1) {
+                    votes.splice(idx, 1);
+                }
+            }
+
+            currentVotes.get(voteeId).push(voterId);
+
+            if (voteeId === NOT_VOTING) {
+                return Promise.all([
+                    userMap, bot.postPublicMessage(`${userMap.get(voterId).name} is no longer voting.`)
+                ]);
+            } else if (voteeId === NO_LYNCH_NAME) {
+                return Promise.all([
+                    userMap, bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${NO_LYNCH_DISP}.`)
+                ]);
+            } else {
+                return Promise.all([
+                    userMap,
+                    bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${userMap.get(voteeId).name}.`)
+                ]);
+            }
+        })
+        .then(([userMap, _]) => {
+            const vc = getVc();
+            const halfPlus1 = Math.floor(getLivingPlayerCount() / 2) + 1;
+
+            const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
+
+            //a lynch has been reached.
+
+            if (lyncheeId && (lyncheeId !== NOT_VOTING)) {
+                const message: string[] = [];
+
+                if (lyncheeId !== NO_LYNCH_NAME) {
+                    const slot = playerSlots.get(lyncheeId);
+                    slot.die();
+
+                    const victor = isGameOver();
+                    if (victor != null) {
+                        return endGame(victor);
+                    }
+                    message.push(`${userMap.get(lyncheeId).name} was lynched. They were a ${slot.name}.`);
+                    message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
+                } else {
+                    message.push(`No one was lynched.`);
+                    message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
+                }
+                changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
+                nightEndTimeout = setTimeout(endNight, parseInt(process.env.NIGHT_LENGTH, 10) * 1000);
+
+                return bot.postPublicMessage(message.join('\n'));
+            }
+        });
 }
 
-function getPlayerUserMap() {
-    return Promise.all(playerIds.map(playerId => bot.getUserById(playerId)))
-        .then(users => users.reduce((acc, user) => {
-            acc.set(user.id, user);
-            return acc;
-        }, new Map<string, any>()));
-}
 
+// other public getter/setters
 export function reset(): void {
     if (nightEndTimeout) {
         clearTimeout(nightEndTimeout);
@@ -98,20 +282,25 @@ export function getFactionChannels(): Map<Alignment, string> {
     return factionChannels;
 }
 
-export function setSetup(tag: string): any {
-    return Promise.try(() => {
-        if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
-            const newSetup = getSetup(tag);
-            if (newSetup) {
-                currentSetup = newSetup;
-                return bot.postPublicMessage(`Setup was changed to ${currentSetup[':name']} (${currentSetup[':slots'].length} players)`);
-            } else {
-                throw new Error(`${tag} is not a valid setup.`);
-            }
-        } else {
-            throw new Error(`Cannot change setup at this time.`);
-        }
-    });
+export function getPhase(): Phase {
+    return currentPhase;
+}
+
+
+
+// private module methods
+function requirePlaying(playerId: string): void {
+    if (!playerSlots.has(playerId)) {
+        throw new Error('You are not currently playing!');
+    }
+}
+
+function getPlayerUserMap(): Promise<Map<string, any>> {
+    return Promise.all(playerIds.map(playerId => bot.getUserById(playerId)))
+        .then(users => users.reduce((acc, user) => {
+            acc.set(user.id, user);
+            return acc;
+        }, new Map<string, any>()));
 }
 
 function startGame() {
@@ -192,54 +381,6 @@ function changePhase(phase: Phase): void {
     }
 }
 
-export function addPlayer(playerId: string) {
-    return Promise.try(() => {
-        const idx = playerIds.indexOf(playerId);
-
-        if (playerIds.length >= currentSetup[':slots'].length) {
-            throw new Error("Game is full!");
-        } else if (idx === -1) {
-            playerIds.push(playerId);
-            return bot.getUserById(playerId)
-                .then(player => bot.postPublicMessage(`${player.name} has joined.`))
-                .then(() => {
-                    if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
-                        return startGame();
-                    }
-                });
-        } else {
-            throw new Error("You are already signed up!");
-        }
-    });
-}
-
-export function removePlayer(playerId: string) {
-    return Promise.try(() => {
-        const idx = playerIds.indexOf(playerId);
-        if (idx !== -1) {
-            playerIds.splice(idx, 1);
-            return bot.getUserById(playerId)
-                .then(player => bot.postPublicMessage(`${player.name} has left.`));
-        } else {
-            throw new Error("You are not currently signed up.");
-        }
-    });
-}
-
-export function addOrReplaceAction(actorId: string, actionName: string, targetId: string, targetName: string) {
-    requirePlaying(actorId);
-
-    if (!playerSlots.has(targetId)) {
-        throw new Error(`${targetName} is not currently playing!`);
-    }
-
-    return addOrReplaceFormattedAction({
-        actor: playerSlots.get(actorId),
-        abilityType: actionResolver(actionName),
-        target: targetId == null ? null : playerSlots.get(targetId)
-    });
-}
-
 function addOrReplaceFormattedAction(action: Action) {
     return Promise.try(() => {
         const abilityDef = abilityFactory(action.abilityType);
@@ -286,16 +427,6 @@ function addOrReplaceFormattedAction(action: Action) {
     });
 }
 
-export function getActionsForFaction(faction: Alignment): Action[] {
-    return currentActions.filter(action => {
-        return action.actor.alignment === faction;
-    });
-}
-
-export function getPhase(): Phase {
-    return currentPhase;
-}
-
 function getVc(): any[] {
     return Array.from(currentVotes.entries()).reduce((acc, [voteeId, votes]) => {
         acc.push([voteeId, votes]);
@@ -332,98 +463,17 @@ function initVotes(): void {
         }, new Map<string, string[]>());
 
     currentVotes.set(NOT_VOTING, []);
+    currentVotes.set(NO_LYNCH_NAME, []);
 
     livingPlayerIds.forEach(playerId => {
         currentVotes.get(NOT_VOTING).push(playerId);
     });
 }
 
-export function setVote({ voterId, voteeId }: Vote) {
-    if (currentPhase.time !== TimeOfDay.Day) {
-        throw new Error("You cannot vote right now.");
-    }
-
-    if (!voteeId) {
-        voteeId = NOT_VOTING;
-    }
-
-    for (const [votee, votes] of currentVotes) {
-        const idx = votes.indexOf(voterId);
-        if (idx > -1) {
-            votes.splice(idx, 1);
-        }
-    }
-
-    currentVotes.get(voteeId).push(voterId);
-
-    return getPlayerUserMap()
-        .then(userMap => {
-            if (voteeId !== NOT_VOTING) {
-                return Promise.all([
-                    userMap,
-                    bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${userMap.get(voteeId).name}.`)
-                ]);
-            } else {
-                return Promise.all([
-                    userMap, bot.postPublicMessage(`${userMap.get(voterId).name} is no longer voting.`)
-                ]);
-            }
-        })
-        .then(([userMap, _]) => {
-            const vc = getVc();
-            const halfPlus1 = Math.floor(getLivingPlayerCount() / 2) + 1;
-
-            const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
-
-            //a lynch has been reached.
-            if (lyncheeId && (lyncheeId !== NOT_VOTING)) {
-                const slot = playerSlots.get(lyncheeId);
-                slot.die();
-
-                const victor = isGameOver();
-                if (victor != null) {
-                    return endGame(victor);
-                }
-                changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
-                nightEndTimeout = setTimeout(endNight, parseInt(process.env.NIGHT_LENGTH, 10) * 1000);
-
-                const message: string[] = [];
-                message.push(`${userMap.get(lyncheeId).name} was lynched. They were a ${slot.name}.`);
-                message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
-
-                return bot.postPublicMessage(message.join('\n'));
-            }
-        });
-}
-
-export function doVoteCount() {
-    const vc = getVc();
-    const message: string[] = ['Votecount:'];
-
-    const livingPlayers = getLivingPlayerCount();
-    const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
-
-    return getPlayerUserMap()
-        .then(userMap => {
-            vc.forEach(([voteeId, votes]) => {
-                if (voteeId !== NOT_VOTING) {
-                    message.push([
-                        `[${votes.length}] ${userMap.get(voteeId).name}: `,
-                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
-                    ].join(''));
-                } else {
-                    message.push([
-                        `[${votes.length}] ${NOT_VOTING}: `,
-                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
-                    ].join(''));
-                }
-            });
-
-            message.push('');
-            message.push(`With ${getLivingPlayerCount()} alive, it is ${halfPlusOne} to lynch.`);
-
-            return bot.postPublicMessage(message.join('\n'));
-        });
+function getActionsForFaction(faction: Alignment): Action[] {
+    return currentActions.filter(action => {
+        return action.actor.alignment === faction;
+    });
 }
 
 function endNight() {
@@ -450,6 +500,11 @@ function endNight() {
             }));
         })
         .then(() => {
+            const victor = isGameOver();
+            if (victor != null) {
+                return endGame(victor);
+            }
+
             changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
             return bot.postPublicMessage(`It is now Day ${currentPhase.num}`)
                 .then(() => {

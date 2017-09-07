@@ -86,10 +86,7 @@ class CommandRouter {
         const voterName = req.body.user_name;
         const voteeName = req.body.text;
 
-        return bot.getUserId(voteeName)
-            .then(voteeId => {
-                return setVote({ voterId, voteeId });
-            })
+        return setVote({ voterId, voteeName })
             .then(() => {
                 return res.json({ text: "Vote set!" });
             })
@@ -113,12 +110,11 @@ class CommandRouter {
     submitAction(req: Request, res: Response) {
         const actorId = req.body.user_id;
         const actorName = req.body.user_name;
-        const [actionName, targetName] = req.body.text.split(' ');
+        const targetArr = req.body.text.split(' ');
+        const actionName = targetArr[0];
+        const targetName = targetArr.slice(1).join(' ');
 
-        return Promise.resolve(targetName ? bot.getUserId(targetName) : null)
-            .then(targetId => {
-                return addOrReplaceAction(actorId, actionName, targetId, targetName);
-            })
+        return addOrReplaceAction(actorId, actionName, targetName)
             .then(() => {
                 return res.json({ text: `Confirming: ${actionName} on ${targetName}` });
             })
