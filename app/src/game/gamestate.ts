@@ -313,13 +313,17 @@ function getVc(): any[] {
         });
 }
 
-function getLivingPlayers(): number {
-    return playerIds.filter(playerId => playerSlots.get(playerId).isAlive).length;
+function getLivingPlayers(): Slot[] {
+    return Array.from(playerSlots.values()).filter(slot => slot.isAlive);
+}
+
+function getLivingPlayerCount(): number {
+    return getLivingPlayers().length;
 }
 
 function initVotes(): void {
-    const livingPlayerIds = playerIds
-        .filter(playerId => playerSlots.has(playerId) && playerSlots.get(playerId).isAlive);
+    const livingPlayerIdsUnordered = getLivingPlayers().map(player => player.playerId);
+    const livingPlayerIds = playerIds.filter(playerId => livingPlayerIdsUnordered.includes(playerId));
 
     currentVotes = livingPlayerIds
         .reduce((acc, playerId) => {
@@ -367,7 +371,7 @@ export function setVote({ voterId, voteeId }: Vote) {
         })
         .then(([userMap, _]) => {
             const vc = getVc();
-            const halfPlus1 = Math.floor(getLivingPlayers() / 2) + 1;
+            const halfPlus1 = Math.floor(getLivingPlayerCount() / 2) + 1;
 
             const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
@@ -375,6 +379,11 @@ export function setVote({ voterId, voteeId }: Vote) {
             if (lyncheeId && (lyncheeId !== NOT_VOTING)) {
                 const slot = playerSlots.get(lyncheeId);
                 slot.die();
+
+                const victor = isGameOver();
+                if (victor != null) {
+                    return endGame(victor);
+                }
                 changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
                 nightEndTimeout = setTimeout(endNight, parseInt(process.env.NIGHT_LENGTH, 10) * 1000);
 
@@ -391,7 +400,7 @@ export function doVoteCount() {
     const vc = getVc();
     const message: string[] = ['Votecount:'];
 
-    const livingPlayers = getLivingPlayers();
+    const livingPlayers = getLivingPlayerCount();
     const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
 
     return getPlayerUserMap()
@@ -411,7 +420,7 @@ export function doVoteCount() {
             });
 
             message.push('');
-            message.push(`With ${getLivingPlayers()} alive, it is ${halfPlusOne} to lynch.`);
+            message.push(`With ${getLivingPlayerCount()} alive, it is ${halfPlusOne} to lynch.`);
 
             return bot.postPublicMessage(message.join('\n'));
         });
@@ -447,5 +456,34 @@ function endNight() {
                     initVotes();
                     doVoteCount();
                 });
+        });
+}
+
+function isGameOver(): Alignment {
+    const livingPlayers = getLivingPlayers();
+
+    // town
+    if (livingPlayers.every(player => player.alignment === Alignment.Town)) {
+        return Alignment.Town;
+    }
+
+    const livingMafia = livingPlayers.filter(player => player.alignment === Alignment.Mafia);
+    if (livingMafia.length >= livingPlayers.length / 2) {
+        return Alignment.Mafia;
+    }
+
+    return null;
+}
+
+function endGame(victor: Alignment) {
+    const winners = Array.from(playerSlots.values()).filter(slot => slot.alignment === victor);
+
+    return getPlayerUserMap()
+        .then(userMap => {
+            let message = [`The game has ended. The ${AlignmentAttributesMap.get(victor).name}, consisting of:`];
+            message = message.concat(winners.map(winner => userMap.get(winner.playerId).name));
+            message.push(`has won!`);
+            reset();
+            return bot.postPublicMessage(message.join('\n'));
         });
 }

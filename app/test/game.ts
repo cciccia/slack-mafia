@@ -58,11 +58,13 @@ function performTimedCommands(commands) {
 function getPlayersByRoleAndAlignment() {
     const players = gamestate.getPlayers();
 
-    const town = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
-    const mafia = clients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
+    const activeClients = clients.filter(client => players.has(client.id));
+
+    const town = activeClients.filter(client => players.get(client.id).alignment === constants.Alignment.Town);
+    const mafia = activeClients.filter(client => players.get(client.id).alignment === constants.Alignment.Mafia);
     const cop = town.find(client => players.get(client.id).name === 'Town Macho Cop');
     const doctor = town.find(client => players.get(client.id).name === 'Town Doctor');
-    const vanilla = town.filter(client => client.id !== cop.id && client.id !== doctor.id);
+    const vanilla = town.filter(client => (!cop || client.id !== cop.id) && (!doctor || client.id !== doctor.id));
 
     return {
         town, mafia, cop, doctor, vanilla
@@ -272,6 +274,61 @@ function getPlayersByRoleAndAlignment() {
                 const { town, mafia, cop, doctor, vanilla } = getPlayersByRoleAndAlignment();
 
                 players.get(cop.id).isAlive.should.be.false;
+            });
+    }
+
+    @test townVictory() {
+        return clients[0].doSlashCommand('/setup', 'boring')
+            .then(() => {
+                return Promise.all(clients.slice(0, 3).map(client => client.doSlashCommand('/in')));
+            })
+            .then(() => {
+                const { town, mafia } = getPlayersByRoleAndAlignment();
+
+                return Promise.all([town, mafia, performTimedCommands([
+                    [town[0], '/vote', mafia[0].name],
+                    [town[1], '/vote', mafia[0].name]
+                ])]);
+            })
+            .then(([town, mafia]) => {
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                const sCalls = slackMock.slashCommands.calls;
+
+                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                    `The game has ended. The Town, consisting of:`,
+                    town[0].name,
+                    town[1].name,
+                    `has won!`
+                ].join('\n')));
+
+                gamestate.getPhase().should.eql({ time: constants.TimeOfDay.WaitingForPlayers });
+            });
+    }
+
+    @test mafiaVictory() {
+        return clients[0].doSlashCommand('/setup', 'boring')
+            .then(() => {
+                return Promise.all(clients.slice(0, 3).map(client => client.doSlashCommand('/in')));
+            })
+            .then(() => {
+                const { town, mafia } = getPlayersByRoleAndAlignment();
+
+                return Promise.all([town, mafia, performTimedCommands([
+                    [town[0], '/vote', town[1].name],
+                    [mafia[0], '/vote', town[1].name]
+                ])]);
+            })
+            .then(([town, mafia]) => {
+                const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
+                const sCalls = slackMock.slashCommands.calls;
+
+                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                    `The game has ended. The Mafia, consisting of:`,
+                    mafia[0].name,
+                    `has won!`
+                ].join('\n')));
+
+                gamestate.getPhase().should.eql({ time: constants.TimeOfDay.WaitingForPlayers });
             });
     }
 }
