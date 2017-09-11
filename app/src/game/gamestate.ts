@@ -70,6 +70,10 @@ export function setSetup(tag: string): any {
 
 export function addPlayer(playerId: string) {
     return Promise.try(() => {
+        if (currentPhase && currentPhase.time !== TimeOfDay.WaitingForPlayers) {
+            throw new Error("Cannot join game in progress");
+        }
+
         const idx = playerIds.indexOf(playerId);
 
         if (playerIds.length >= currentSetup[':slots'].length) {
@@ -91,6 +95,9 @@ export function addPlayer(playerId: string) {
 
 export function removePlayer(playerId: string) {
     return Promise.try(() => {
+        if (currentPhase && currentPhase.time !== TimeOfDay.WaitingForPlayers) {
+            throw new Error("Cannot leave game in progress");
+        }
         const idx = playerIds.indexOf(playerId);
         if (idx !== -1) {
             playerIds.splice(idx, 1);
@@ -148,8 +155,7 @@ export function setVote({ voterId, voteeName }: Vote) {
                 throw new Error(`No player ${voteeName} is currently playing and alive.`);
             }
 
-
-            for (const [votee, votes] of currentVotes) {
+            for (const [votee, votes] of currentVotes.entries()) {
                 const idx = votes.indexOf(voterId);
                 if (idx > -1) {
                     votes.splice(idx, 1);
@@ -165,16 +171,17 @@ export function setVote({ voterId, voteeName }: Vote) {
             } else if (voteeId === NO_LYNCH_NAME) {
                 return postPublicMessage(`${voterName} is now voting ${NO_LYNCH_DISP}.`);
             } else {
-                return postPublicMessage(`${voterName} is now voting ${NO_LYNCH_DISP}.`);
+                return postPublicMessage(`${voterName} is now voting ${voteeName}.`);
             }
         })
         .then(() => {
             const vc = getVc();
             const halfPlus1 = Math.floor(getLivingPlayerCount() / 2) + 1;
 
-            const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
+            const lynch = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
-            if (lyncheeId) {
+            if (lynch) {
+                const [lyncheeId, votesToLynch] = lynch;
                 return Promise.all([lyncheeId, getUserNameFromId(lyncheeId)]);
             } else {
                 return Promise.resolve([null, null]);
