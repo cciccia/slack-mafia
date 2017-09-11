@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/cciccia/slack-mafia.svg?branch=master)](https://travis-ci.org/cciccia/slack-mafia)
+[![pipeline status](https://gitlab.madisonhub.org/cciccia/slack-mafia/badges/master/pipeline.svg)](https://gitlab.madisonhub.org/cciccia/slack-mafia/commits/master)
 
 # slack-mafia
 Slackbot that runs mafia games
