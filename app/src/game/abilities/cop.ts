@@ -1,16 +1,16 @@
 import { Slot } from '../slot';
 import { AbilityActivationType, AlignmentAttributesMap } from '../../constants';
-import bot from '../../comm/bot';
+import { postMessage, getUserNameFromId } from '../../comm/restCommands';
 
 export default {
     activationType: AbilityActivationType.Active,
 
-    resolve(actor: Slot, target: Slot): void {
-        return bot.getUserById(target.playerId)
-            .then(p => {
-                return bot.postMessageToUserById(
-                    actor.playerId,
-                    `${p.name} is aligned with the ${AlignmentAttributesMap.get(target.alignment).name}`
+    resolve(actor: Slot, target: Slot) {
+        return getUserNameFromId(target.playerId)
+            .then(playerName => {
+                return postMessage(
+                    `@${playerName}`,
+                    `${playerName} is aligned with the ${AlignmentAttributesMap.get(target.alignment).name}`
                 );
             });
     }

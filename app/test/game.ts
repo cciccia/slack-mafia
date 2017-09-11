@@ -10,7 +10,6 @@ import * as Promise from 'bluebird';
 import * as gamestate from '../src/game/gamestate';
 import * as constants from '../src/constants';
 import * as utils from '../src/utils';
-import bot from '../src/comm/bot';
 
 const edn = utils.getEdn();
 
@@ -20,8 +19,8 @@ function buildChatCall(id, text) {
         params: {
             text,
             channel: id,
-            username: process.env.SLACK_BOT_DESCRIPTION,
-            token: process.env.SLACK_BOT_TOKEN
+            as_user: 'false',
+            token: process.env.SLACK_API_TOKEN
         }
     };
 }
@@ -77,21 +76,21 @@ function getPlayersByRoleAndAlignment() {
     }
 
     before() {
-        gamestate.reset();
         slackMock.reset();
-        addCustomResponses();
+        addCustomResponses(clients);
+        gamestate.reset();
     }
 
     @test setSetup() {
-        return clients[0].doSlashCommand('/setup', 'boring')
+        return clients[0].doSlashCommand('/setup', 'simple')
             .then(() => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
                 const sCalls = slackMock.slashCommands.calls;
 
                 const setup = gamestate.getCurrentSetup();
                 should.exist(setup);
-                setup.should.eql(edn.parse(['{:name "Boring 3p"',
-                    ':tag "boring"',
+                setup.should.eql(edn.parse(['{:name "Simple 3p"',
+                    ':tag "simple"',
                     ':slots [{:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}',
                     '{:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}',
                     '{:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}]',
@@ -115,10 +114,9 @@ function getPlayersByRoleAndAlignment() {
 
                 const { mafia } = getPlayersByRoleAndAlignment();
 
-                players.forEach(player => {
-                    const channelId = bot.ims.find(im => im.user === player[0]).id;
-
-                    wCalls.should.deep.contain(buildChatCall(channelId, `Your role is: ${player[1].name}.`));
+                players.forEach(([playerId, player]) => {
+                    const playerClient = clients.find(client => client.id === playerId);
+                    wCalls.should.deep.contain(buildChatCall(`@${playerClient.name}`, `Your role is: ${player.name}.`));
                 });
 
                 wCalls.should.deep.contain(buildGroupCreateCall(`Mafia-${gamestate.getGameId()}`));
@@ -132,7 +130,7 @@ function getPlayersByRoleAndAlignment() {
                     ));
                 });
 
-                wCalls.should.deep.contain(buildChatCall(bot.channels[0].id, `It is now Day 1.`));
+                wCalls.should.deep.contain(buildChatCall(`#${process.env.SLACK_GAME_CHANNEL}`, `It is now Day 1.`));
             });
     }
 
@@ -152,7 +150,7 @@ function getPlayersByRoleAndAlignment() {
             .then(result => {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
 
-                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                wCalls.slice(-1)[0].should.eql(buildChatCall(`#${process.env.SLACK_GAME_CHANNEL}`, [
                     'Votecount:',
                     `[3] ${clients[6].name}: (${clients[0].name}, ${clients[1].name}, ${clients[2].name})`,
                     `[4] Not Voting: (${clients[3].name}, ${clients[4].name}, ${clients[5].name}, ${clients[6].name})`,
@@ -171,7 +169,7 @@ function getPlayersByRoleAndAlignment() {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
                 const sCalls = slackMock.slashCommands.calls;
 
-                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                wCalls.slice(-1)[0].should.eql(buildChatCall(`#${process.env.SLACK_GAME_CHANNEL}`, [
                     'Votecount:',
                     `[2] ${clients[3].name}: (${clients[5].name}, ${clients[2].name})`,
                     `[1] ${clients[6].name}: (${clients[0].name})`,
@@ -199,7 +197,7 @@ function getPlayersByRoleAndAlignment() {
                 const players = gamestate.getPlayers();
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
 
-                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                wCalls.slice(-1)[0].should.eql(buildChatCall(`#${process.env.SLACK_GAME_CHANNEL}`, [
                     `${clients[6].name} was lynched. They were a ${players.get(clients[6].id).name}.`,
                     `It is now Night 1. Night will last ${process.env.NIGHT_LENGTH} seconds.`
                 ].join('\n')));
@@ -280,7 +278,7 @@ function getPlayersByRoleAndAlignment() {
     }
 
     @test townVictory() {
-        return clients[0].doSlashCommand('/setup', 'boring')
+        return clients[0].doSlashCommand('/setup', 'simple')
             .then(() => {
                 return Promise.all(clients.slice(0, 3).map(client => client.doSlashCommand('/in')));
             })
@@ -313,7 +311,7 @@ function getPlayersByRoleAndAlignment() {
     }
 
     @test mafiaVictory() {
-        return clients[0].doSlashCommand('/setup', 'boring')
+        return clients[0].doSlashCommand('/setup', 'simple')
             .then(() => {
                 return Promise.all(clients.slice(0, 3).map(client => client.doSlashCommand('/in')));
             })
@@ -329,7 +327,7 @@ function getPlayersByRoleAndAlignment() {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
                 const sCalls = slackMock.slashCommands.calls;
 
-                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                wCalls.slice(-1)[0].should.eql(buildChatCall(`#${process.env.SLACK_GAME_CHANNEL}`, [
                     `The game has ended. The Mafia, consisting of:`,
                     mafia[0].name,
                     `has won!`
@@ -340,7 +338,7 @@ function getPlayersByRoleAndAlignment() {
     }
 
     @test nighttimeMafiaVictory() {
-        return clients[0].doSlashCommand('/setup', 'boring')
+        return clients[0].doSlashCommand('/setup', 'simple')
             .then(() => {
                 return Promise.all(clients.slice(0, 3).map(client => client.doSlashCommand('/in')));
             })
@@ -364,7 +362,7 @@ function getPlayersByRoleAndAlignment() {
                 const wCalls = slackMock.web.calls.map(({ url, params }) => ({ url, params }));
                 const sCalls = slackMock.slashCommands.calls;
 
-                wCalls.slice(-1)[0].should.eql(buildChatCall(bot.channels[0].id, [
+                wCalls.slice(-1)[0].should.eql(buildChatCall(`#${process.env.SLACK_GAME_CHANNEL}`, [
                     `The game has ended. The Mafia, consisting of:`,
                     mafia[0].name,
                     `has won!`

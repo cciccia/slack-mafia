@@ -9,8 +9,8 @@
           {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}
           {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}]
   :has-day-talk false}
- {:name "Boring 3p"
-  :tag "boring"
+ {:name "Simple 3p"
+  :tag "simple"
   :slots [{:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
           {:name "Vanilla Townie" :alignment #sm/enum :alignment/town :abilities []}
           {:name "Mafia Goon" :alignment #sm/enum :alignment/mafia :abilities []}]

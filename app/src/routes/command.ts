@@ -3,8 +3,8 @@ import * as Promise from 'bluebird';
 import * as channels from 'channels';
 
 import logger from '../logger';
-import bot from '../comm/bot';
-import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, doVoteCount } from '../game/gamestate';
+import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, requestVoteCount } from '../game/gamestate';
+import { NOT_VOTING_NAME } from '../constants';
 
 class CommandRouter {
     router: Router;
@@ -94,6 +94,7 @@ class CommandRouter {
                 return res.json({ text: "Vote set!" });
             })
             .catch(e => {
+                logger.error(e);
                 return res.json({ text: e.message });
             });
     }
@@ -102,7 +103,7 @@ class CommandRouter {
         const voterId = req.body.user_id;
         const voterName = req.body.user_name;
 
-        return setVote({ voterId })
+        return setVote({ voterId, voteeName: NOT_VOTING_NAME })
             .then(() => {
                 return res.json({ text: "Vote cleared!" });
             }).catch(e => {
@@ -129,7 +130,9 @@ class CommandRouter {
     }
 
     requestVotecount(req: Request, res: Response) {
-        return doVoteCount()
+        const playerId = req.body.user_id;
+
+        return requestVoteCount(playerId)
             .then(() => {
                 return res.json({ text: "Ok!" });
             }).catch(e => {

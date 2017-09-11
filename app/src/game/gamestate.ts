@@ -5,12 +5,18 @@ import { getEdn } from '../utils';
 const edn = getEdn();
 
 import { getSetup, getFirstSetup } from './setup';
-import { TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment, AbilityActivationType } from '../constants';
+import {
+    TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment, AbilityActivationType,
+    NOT_VOTING_NAME, NOT_VOTING_DISP, NO_LYNCH_NAME, NO_LYNCH_DISP
+} from '../constants';
 import { Action, abilityFactory, validate, actionResolver, actionDescriber } from './ability';
 import { Slot } from './slot';
 
-import bot from '../comm/bot';
-import { createPrivateChannel } from '../comm/restCommands';
+import {
+    createPrivateChannel, getChannelNameFromId, getChannelIdFromName,
+    getUserNameFromId, getUserIdFromName, postMessage, postPublicMessage,
+    getUserIdToNameMap, getUserNameToIdMap
+} from '../comm/restCommands';
 
 const shortId = require('shortid');
 
@@ -23,10 +29,6 @@ export interface Vote {
     voterId: string;
     voteeName?: string;
 }
-
-const NOT_VOTING: string = 'Not Voting';
-const NO_LYNCH_NAME: string = 'no lynch';
-const NO_LYNCH_DISP: string = 'No Lynch';
 
 // game transcending state
 let currentSetup;
@@ -56,7 +58,7 @@ export function setSetup(tag: string): any {
             const newSetup = getSetup(tag.toLowerCase());
             if (newSetup) {
                 currentSetup = newSetup;
-                return bot.postPublicMessage(`Setup was changed to ${currentSetup[':name']} (${currentSetup[':slots'].length} players)`);
+                return postPublicMessage(`Setup was changed to ${currentSetup[':name']} (${currentSetup[':slots'].length} players)`);
             } else {
                 throw new Error(`${tag.toLowerCase()} is not a valid setup.`);
             }
@@ -74,8 +76,8 @@ export function addPlayer(playerId: string) {
             throw new Error("Game is full!");
         } else if (idx === -1) {
             playerIds.push(playerId);
-            return bot.getUserById(playerId)
-                .then(player => bot.postPublicMessage(`${player.name} has joined.`))
+            return getUserNameFromId(playerId)
+                .then(name => postPublicMessage(`${name} has joined.`))
                 .then(() => {
                     if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
                         return startGame();
@@ -92,60 +94,28 @@ export function removePlayer(playerId: string) {
         const idx = playerIds.indexOf(playerId);
         if (idx !== -1) {
             playerIds.splice(idx, 1);
-            return bot.getUserById(playerId)
-                .then(player => bot.postPublicMessage(`${player.name} has left.`));
+            return getUserNameFromId(playerId)
+                .then(name => postPublicMessage(`${name} has left.`));
         } else {
             throw new Error("You are not currently signed up.");
         }
     });
 }
 
-export function doVoteCount() {
-    const vc = getVc();
-    const message: string[] = ['Votecount:'];
-
-    const livingPlayers = getLivingPlayerCount();
-    const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
-
-    return getPlayerUserMap()
-        .then(userMap => {
-            vc.forEach(([voteeId, votes]) => {
-                if (voteeId === NOT_VOTING) {
-                    message.push([
-                        `[${votes.length}] ${NOT_VOTING}: `,
-                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
-                    ].join(''));
-                } else if (voteeId === NO_LYNCH_NAME) {
-                    message.push([
-                        `[${votes.length}] ${NO_LYNCH_DISP}: `,
-                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
-                    ].join(''));
-                } else {
-                    message.push([
-                        `[${votes.length}] ${userMap.get(voteeId).name}: `,
-                        `(${votes.map(vote => userMap.get(vote).name).join(', ')})`
-                    ].join(''));
-                }
-            });
-
-            message.push('');
-            message.push(`With ${getLivingPlayerCount()} alive, it is ${halfPlusOne} to lynch.`);
-
-            return bot.postPublicMessage(message.join('\n'));
+export function requestVoteCount(playerId: string) {
+    return Promise.resolve(requirePlaying(playerId))
+        .then(() => {
+            return doVoteCount();
         });
 }
 
 export function addOrReplaceAction(actorId: string, actionName: string, targetName: string) {
-    requirePlaying(actorId);
-
-    return getPlayerUserMap()
-        .then(userMap => {
-
-            let targetId;
-            const target = Array.from(userMap.values()).find(user => user.name === targetName.toLowerCase());
-            if (target) {
-                targetId = target.id;
-            }
+    return Promise.resolve(requirePlaying(actorId))
+        .then(() => {
+            return getUserNameToIdMap();
+        })
+        .then(namesToIds => {
+            const targetId = namesToIds.get(targetName);
 
             const livingPlayers = getLivingPlayers();
 
@@ -162,30 +132,22 @@ export function addOrReplaceAction(actorId: string, actionName: string, targetNa
 }
 
 export function setVote({ voterId, voteeName }: Vote) {
-    requirePlaying(voterId);
-
-    if (currentPhase.time !== TimeOfDay.Day) {
-        throw new Error("You cannot vote right now.");
-    }
-
-    return getPlayerUserMap()
-        .then(userMap => {
-            let voteeId;
-
-            if (!voteeName) {
-                voteeId = NOT_VOTING;
-            } else if (voteeName.toLowerCase() === NO_LYNCH_NAME) {
-                voteeId = NO_LYNCH_NAME;
-            } else {
-                const votee = Array.from(userMap.values()).find(user => user.name === voteeName.toLowerCase());
-                if (votee) {
-                    voteeId = votee.id;
-                }
-                const livingPlayers = getLivingPlayers();
-                if (!voteeId || !livingPlayers.find(livingPlayer => livingPlayer.playerId === voteeId)) {
-                    throw new Error(`No player ${voteeName} is currently playing and alive.`);
-                }
+    return Promise.resolve(requirePlaying(voterId))
+        .then(() => {
+            if (currentPhase.time !== TimeOfDay.Day) {
+                throw new Error("You cannot vote right now.");
             }
+
+            return getUserIdFromName(voteeName);
+        }).then(voteeId => {
+            const livingPlayers = getLivingPlayers();
+            if (!voteeId ||
+                (!livingPlayers.find(livingPlayer => livingPlayer.playerId === voteeId) &&
+                    voteeId !== NOT_VOTING_NAME &&
+                    voteeId !== NO_LYNCH_NAME)) {
+                throw new Error(`No player ${voteeName} is currently playing and alive.`);
+            }
+
 
             for (const [votee, votes] of currentVotes) {
                 const idx = votes.indexOf(voterId);
@@ -195,31 +157,31 @@ export function setVote({ voterId, voteeName }: Vote) {
             }
 
             currentVotes.get(voteeId).push(voterId);
-
-            if (voteeId === NOT_VOTING) {
-                return Promise.all([
-                    userMap, bot.postPublicMessage(`${userMap.get(voterId).name} is no longer voting.`)
-                ]);
+            return Promise.all([voteeId, getUserNameFromId(voterId)]);
+        })
+        .then(([voteeId, voterName]) => {
+            if (voteeId === NOT_VOTING_NAME) {
+                return postPublicMessage(`${voterName} is no longer voting.`);
             } else if (voteeId === NO_LYNCH_NAME) {
-                return Promise.all([
-                    userMap, bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${NO_LYNCH_DISP}.`)
-                ]);
+                return postPublicMessage(`${voterName} is now voting ${NO_LYNCH_DISP}.`);
             } else {
-                return Promise.all([
-                    userMap,
-                    bot.postPublicMessage(`${userMap.get(voterId).name} is now voting ${userMap.get(voteeId).name}.`)
-                ]);
+                return postPublicMessage(`${voterName} is now voting ${NO_LYNCH_DISP}.`);
             }
         })
-        .then(([userMap, _]) => {
+        .then(() => {
             const vc = getVc();
             const halfPlus1 = Math.floor(getLivingPlayerCount() / 2) + 1;
 
             const [lyncheeId, votesToLynch] = vc.find(([voteeId, votes]) => votes.length >= halfPlus1);
 
-            //a lynch has been reached.
-
-            if (lyncheeId && (lyncheeId !== NOT_VOTING)) {
+            if (lyncheeId) {
+                return Promise.all([lyncheeId, getUserNameFromId(lyncheeId)]);
+            } else {
+                return Promise.resolve([null, null]);
+            }
+        })
+        .then(([lyncheeId, lyncheeName]) => {
+            if (lyncheeId && (lyncheeId !== NOT_VOTING_NAME)) {
                 const message: string[] = [];
 
                 if (lyncheeId !== NO_LYNCH_NAME) {
@@ -230,7 +192,7 @@ export function setVote({ voterId, voteeName }: Vote) {
                     if (victor != null) {
                         return endGame(victor);
                     }
-                    message.push(`${userMap.get(lyncheeId).name} was lynched. They were a ${slot.name}.`);
+                    message.push(`${lyncheeName} was lynched. They were a ${slot.name}.`);
                     message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
                 } else {
                     message.push(`No one was lynched.`);
@@ -239,7 +201,7 @@ export function setVote({ voterId, voteeName }: Vote) {
                 changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
                 nightEndTimeout = setTimeout(endNight, parseInt(process.env.NIGHT_LENGTH, 10) * 1000);
 
-                return bot.postPublicMessage(message.join('\n'));
+                return postPublicMessage(message.join('\n'));
             }
         });
 }
@@ -247,11 +209,14 @@ export function setVote({ voterId, voteeName }: Vote) {
 
 // other public getter/setters
 export function reset(): void {
+    changePhase({ time: TimeOfDay.WaitingForPlayers });
     if (nightEndTimeout) {
         clearTimeout(nightEndTimeout);
     }
 
-    changePhase({ time: TimeOfDay.WaitingForPlayers });
+    if (!currentSetup) {
+        setSetup(getFirstSetup()[':tag']);
+    }
     currentGameId = undefined;
 
     playerIds.length = 0;
@@ -289,18 +254,12 @@ export function getPhase(): Phase {
 
 
 // private module methods
-function requirePlaying(playerId: string): void {
-    if (!playerSlots.has(playerId)) {
-        throw new Error('You are not currently playing!');
-    }
-}
-
-function getPlayerUserMap(): Promise<Map<string, any>> {
-    return Promise.all(playerIds.map(playerId => bot.getUserById(playerId)))
-        .then(users => users.reduce((acc, user) => {
-            acc.set(user.id, user);
-            return acc;
-        }, new Map<string, any>()));
+function requirePlaying(playerId: string): Promise<any> {
+    return Promise.try(() => {
+        if (!playerSlots.has(playerId)) {
+            throw new Error('You are not currently playing!');
+        }
+    });
 }
 
 function startGame() {
@@ -334,7 +293,7 @@ function startGame() {
     return Promise.all([createPrivateChannels(), sendRoles()])
         .then(() => {
             changePhase({ time: TimeOfDay.Day, num: 1 });
-            return bot.postPublicMessage(`It is now Day 1.`)
+            return postPublicMessage(`It is now Day 1.`)
                 .then(() => {
                     initVotes();
                     doVoteCount();
@@ -356,9 +315,10 @@ function createPrivateChannels() {
     return Promise.all(Array.from(alignmentMap.entries())
         .filter(([alignment, _]) => alignment !== Alignment.Town)
         .map(([alignment, members]) => {
-            return createPrivateChannel(`${AlignmentAttributesMap.get(alignment).name}-${getGameId()}`, members)
+            return createPrivateChannel(`${AlignmentAttributesMap.get(alignment).name}-${getGameId()}`, members, alignment)
                 .then(channelId => {
-                    return factionChannels.set(alignment, channelId);
+                    factionChannels.set(alignment, channelId);
+                    return postMessage(channelId, `Hello.  You are the ${AlignmentAttributesMap.get(alignment).name}`);
                 });
         }));
 }
@@ -366,7 +326,10 @@ function createPrivateChannels() {
 function sendRoles() {
     return Promise.all(Array.from(playerSlots.entries())
         .map(([playerId, slot]) => {
-            return bot.postMessageToUserById(playerId, `Your role is: ${slot.name}.`);
+            return Promise.all([slot, getUserNameFromId(playerId)])
+                .then(([slot, playerName]) => {
+                    return postMessage(`@${playerName}`, `Your role is: ${slot.name}.`);
+                });
         }));
 }
 
@@ -410,15 +373,19 @@ function addOrReplaceFormattedAction(action: Action) {
         });
 
         if (factionChannels.has(action.actor.alignment)) {
-            return getPlayerUserMap()
-                .then(userMap => {
-                    return bot.postMessage(
+            return Promise.all([
+                action,
+                getUserNameFromId(action.actor.playerId),
+                action.target ? getUserNameFromId(action.target.playerId) : null
+            ])
+                .then(([action, playerName, targetName]) => {
+                    return postMessage(
                         factionChannels.get(action.actor.alignment),
                         getActionsForFaction(action.actor.alignment).map(action => {
-                            let a = `${userMap.get(action.actor.playerId).name} will ${actionDescriber(action.abilityType)}`;
+                            let a = `${playerName} will ${actionDescriber(action.abilityType)}`;
 
                             if (action.target) {
-                                a += ` ${userMap.get(action.target.playerId).name}`;
+                                a += ` ${targetName}`;
                             }
                             return a;
                         }).join('\n'));
@@ -434,9 +401,9 @@ function getVc(): any[] {
     }, [])
         .filter(([voteeId, votes]) => votes.length > 0)
         .sort((a, b) => {
-            if (a[0] === NOT_VOTING) {
+            if (a[0] === NOT_VOTING_NAME) {
                 return 1;
-            } else if (b[0] === NOT_VOTING) {
+            } else if (b[0] === NOT_VOTING_NAME) {
                 return -1;
             } else {
                 return b[1].length - a[1].length;
@@ -462,11 +429,11 @@ function initVotes(): void {
             return acc;
         }, new Map<string, string[]>());
 
-    currentVotes.set(NOT_VOTING, []);
+    currentVotes.set(NOT_VOTING_NAME, []);
     currentVotes.set(NO_LYNCH_NAME, []);
 
     livingPlayerIds.forEach(playerId => {
-        currentVotes.get(NOT_VOTING).push(playerId);
+        currentVotes.get(NOT_VOTING_NAME).push(playerId);
     });
 }
 
@@ -506,11 +473,46 @@ function endNight() {
             }
 
             changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
-            return bot.postPublicMessage(`It is now Day ${currentPhase.num}`)
+            return postPublicMessage(`It is now Day ${currentPhase.num}`)
                 .then(() => {
                     initVotes();
                     doVoteCount();
                 });
+        });
+}
+
+function doVoteCount() {
+    const vc = getVc();
+    const message: string[] = ['Votecount:'];
+
+    const livingPlayers = getLivingPlayerCount();
+    const halfPlusOne = Math.floor(livingPlayers / 2) + 1;
+
+    return getUserIdToNameMap()
+        .then(idToNameMap => {
+            vc.forEach(([voteeId, votes]) => {
+                if (voteeId === NOT_VOTING_NAME) {
+                    message.push([
+                        `[${votes.length}] ${NOT_VOTING_DISP}: `,
+                        `(${votes.map(vote => idToNameMap.get(vote)).join(', ')})`
+                    ].join(''));
+                } else if (voteeId === NO_LYNCH_NAME) {
+                    message.push([
+                        `[${votes.length}] ${NO_LYNCH_DISP}: `,
+                        `(${votes.map(vote => idToNameMap.get(vote)).join(', ')})`
+                    ].join(''));
+                } else {
+                    message.push([
+                        `[${votes.length}] ${idToNameMap.get(voteeId)}: `,
+                        `(${votes.map(vote => idToNameMap.get(vote)).join(', ')})`
+                    ].join(''));
+                }
+            });
+
+            message.push('');
+            message.push(`With ${getLivingPlayerCount()} alive, it is ${halfPlusOne} to lynch.`);
+
+            return postPublicMessage(message.join('\n'));
         });
 }
 
@@ -533,12 +535,12 @@ function isGameOver(): Alignment {
 function endGame(victor: Alignment) {
     const winners = Array.from(playerSlots.values()).filter(slot => slot.alignment === victor);
 
-    return getPlayerUserMap()
-        .then(userMap => {
+    return getUserIdToNameMap()
+        .then(idToNameMap => {
             let message = [`The game has ended. The ${AlignmentAttributesMap.get(victor).name}, consisting of:`];
-            message = message.concat(winners.map(winner => userMap.get(winner.playerId).name));
+            message = message.concat(winners.map(winner => idToNameMap.get(winner.playerId)));
             message.push(`has won!`);
             reset();
-            return bot.postPublicMessage(message.join('\n'));
+            return postPublicMessage(message.join('\n'));
         });
 }

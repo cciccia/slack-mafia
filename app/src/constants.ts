@@ -52,3 +52,8 @@ export enum TimeOfDay {
     Pregame,
     Postgame
 }
+
+export const NOT_VOTING_NAME: string = 'not voting';
+export const NOT_VOTING_DISP: string = 'Not Voting';
+export const NO_LYNCH_NAME: string = 'no lynch';
+export const NO_LYNCH_DISP: string = 'No Lynch';

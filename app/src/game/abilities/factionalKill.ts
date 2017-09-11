@@ -1,16 +1,16 @@
 import { Slot } from '../slot';
 import { AbilityActivationType } from '../../constants';
-import bot from '../../comm/bot';
+import { postPublicMessage, getUserNameFromId } from '../../comm/restCommands';
 
 export default {
     activationType: AbilityActivationType.Factional,
 
-    resolve(actor: Slot, target: Slot): void {
+    resolve(actor: Slot, target: Slot) {
         if (!target.isProtected) {
             target.die();
-            return bot.getUserById(target.playerId)
-                .then(p => {
-                    return bot.postPublicMessage(`${p.name} was killed. They were a ${target.name}.`);
+            return getUserNameFromId(target.playerId)
+                .then(playerName => {
+                    return postPublicMessage(`${playerName} was killed. They were a ${target.name}.`);
                 });
         }
     }
