@@ -13,6 +13,7 @@ export class Slot {
     isPermanentlyUnprotectable: boolean = false;
 
     // mutable, temporary state
+    isRoleblocked: boolean = false;
     isProtected: boolean = false;
     isProtectImmune: boolean = false;
 

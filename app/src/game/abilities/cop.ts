@@ -6,12 +6,14 @@ export default {
     activationType: AbilityActivationType.Active,
 
     resolve(actor: Slot, target: Slot) {
-        return getUserNameFromId(target.playerId)
-            .then(playerName => {
-                return postMessage(
-                    `@${playerName}`,
-                    `${playerName} is aligned with the ${AlignmentAttributesMap.get(target.alignment).name}`
-                );
-            });
+        if (!actor.isRoleblocked) {
+            return getUserNameFromId(target.playerId)
+                .then(playerName => {
+                    return postMessage(
+                        `@${playerName}`,
+                        `${playerName} is aligned with the ${AlignmentAttributesMap.get(target.alignment).name}`
+                    );
+                });
+        }
     }
 };

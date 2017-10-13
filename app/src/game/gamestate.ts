@@ -467,11 +467,11 @@ function endNight() {
 
     return Promise.all(passivesToApply)
         .then(() => {
-            return Promise.all(currentActions.map(action => {
+            return Promise.each(currentActions, action => {
                 const ability = abilityFactory(action.abilityType);
                 action.actor.consumeAbility(action.abilityType);
                 return Promise.resolve(ability.resolve(action.actor, action.target));
-            }));
+            });
         })
         .then(() => {
             const victor = isGameOver();

@@ -6,7 +6,7 @@ export default {
     activationType: AbilityActivationType.Factional,
 
     resolve(actor: Slot, target: Slot) {
-        if (!target.isProtected) {
+        if (!actor.isRoleblocked && !target.isProtected) {
             target.die();
             return getUserNameFromId(target.playerId)
                 .then(playerName => {
