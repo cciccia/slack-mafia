@@ -3,7 +3,7 @@ import * as Promise from 'bluebird';
 import * as channels from 'channels';
 
 import logger from '../logger';
-import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, getPhase, setVote, requestVoteCount } from '../game/gamestate';
+import { Vote, setSetup, addPlayer, removePlayer, addOrReplaceAction, setVote, requestVoteCount } from '../game/gamestate';
 import { NOT_VOTING_NAME } from '../constants';
 
 class CommandRouter {

@@ -4,7 +4,7 @@ import * as Promise from 'bluebird';
 import { getEdn } from '../utils';
 const edn = getEdn();
 
-import { getSetup, getFirstSetup } from './setup';
+import { Setup, getSetup, getFirstSetup } from './setup';
 import {
     TimeOfDay, AbilityType, ParityType, AlignmentAttributesMap, Alignment, AbilityActivationType,
     NOT_VOTING_NAME, NOT_VOTING_DISP, NO_LYNCH_NAME, NO_LYNCH_DISP
@@ -30,23 +30,40 @@ export interface Vote {
     voteeName?: string;
 }
 
-// game transcending state
-let currentSetup;
+interface GameState {
+    // game transcending
+    currentSetup?: Setup;
 
-// faction info
-let factionChannels = new Map<Alignment, string>();
+    //factional
+    factionChannels?: Map<Alignment, string>;
 
-// global (semi) permanent state
-let currentGameId: string;
-let currentPhase: Phase;
+    //per-game-permanent
+    currentGameId?: string;
+    currentPhase?: Phase;
 
-// player info
-let playerIds: Array<string> = [];
-let playerSlots = new Map<string, Slot>();
+    //per-game-temporary
+    currentActions?: Action[];
+    currentVotes?: Map<string, string[]>;
 
-// global temporary state
-let currentActions: Action[] = [];
-let currentVotes: Map<string, string[]>;
+    playerIds?: Array<string>;
+    playerSlots?: Map<string, Slot>;
+}
+
+const state: GameState = {
+    factionChannels: new Map(),
+    playerIds: [],
+    playerSlots: new Map(),
+    currentActions: [],
+    currentVotes: new Map()
+};
+
+export function getState(): GameState {
+    return state;
+}
+
+export function updateState(newState: GameState): void {
+    Object.assign(state, newState);
+}
 
 // night end handler;
 let nightEndTimeout;
@@ -54,11 +71,11 @@ let nightEndTimeout;
 // slash command entry points
 export function setSetup(tag: string): any {
     return Promise.try(() => {
-        if (currentPhase && currentPhase.time === TimeOfDay.WaitingForPlayers) {
+        if (state.currentPhase && state.currentPhase.time === TimeOfDay.WaitingForPlayers) {
             const newSetup = getSetup(tag.toLowerCase());
             if (newSetup) {
-                currentSetup = newSetup;
-                return postPublicMessage(`Setup was changed to ${currentSetup[':name']} (${currentSetup[':slots'].length} players)`);
+                updateState({ currentSetup: newSetup });
+                return postPublicMessage(`Setup was changed to ${state.currentSetup.name} (${state.currentSetup.slots.length} players)`);
             } else {
                 throw new Error(`${tag.toLowerCase()} is not a valid setup.`);
             }
@@ -70,20 +87,20 @@ export function setSetup(tag: string): any {
 
 export function addPlayer(playerId: string) {
     return Promise.try(() => {
-        if (currentPhase && currentPhase.time !== TimeOfDay.WaitingForPlayers) {
+        if (state.currentPhase && state.currentPhase.time !== TimeOfDay.WaitingForPlayers) {
             throw new Error("Cannot join game in progress");
         }
 
-        const idx = playerIds.indexOf(playerId);
+        const idx = state.playerIds.indexOf(playerId);
 
-        if (playerIds.length >= currentSetup[':slots'].length) {
+        if (state.playerIds.length >= state.currentSetup.slots.length) {
             throw new Error("Game is full!");
         } else if (idx === -1) {
-            playerIds.push(playerId);
+            updateState({ playerIds: state.playerIds.concat([playerId]) });
             return getUserNameFromId(playerId)
                 .then(name => postPublicMessage(`${name} has joined.`))
                 .then(() => {
-                    if (currentSetup && (currentSetup[':slots'].length === playerIds.length)) {
+                    if (state.currentSetup && (state.currentSetup.slots.length === state.playerIds.length)) {
                         return startGame();
                     }
                 });
@@ -95,12 +112,12 @@ export function addPlayer(playerId: string) {
 
 export function removePlayer(playerId: string) {
     return Promise.try(() => {
-        if (currentPhase && currentPhase.time !== TimeOfDay.WaitingForPlayers) {
+        if (state.currentPhase && state.currentPhase.time !== TimeOfDay.WaitingForPlayers) {
             throw new Error("Cannot leave game in progress");
         }
-        const idx = playerIds.indexOf(playerId);
+        const idx = state.playerIds.indexOf(playerId);
         if (idx !== -1) {
-            playerIds.splice(idx, 1);
+            updateState({ playerIds: state.playerIds.filter((playerId, i) => idx !== i) });
             return getUserNameFromId(playerId)
                 .then(name => postPublicMessage(`${name} has left.`));
         } else {
@@ -131,9 +148,9 @@ export function addOrReplaceAction(actorId: string, actionName: string, targetNa
             }
 
             return addOrReplaceFormattedAction({
-                actor: playerSlots.get(actorId),
+                actor: state.playerSlots.get(actorId),
                 abilityType: actionResolver(actionName),
-                target: targetId == null ? null : playerSlots.get(targetId)
+                target: targetId == null ? null : state.playerSlots.get(targetId)
             });
         });
 }
@@ -141,7 +158,7 @@ export function addOrReplaceAction(actorId: string, actionName: string, targetNa
 export function setVote({ voterId, voteeName }: Vote) {
     return Promise.resolve(requirePlaying(voterId))
         .then(() => {
-            if (currentPhase.time !== TimeOfDay.Day) {
+            if (state.currentPhase.time !== TimeOfDay.Day) {
                 throw new Error("You cannot vote right now.");
             }
 
@@ -155,14 +172,14 @@ export function setVote({ voterId, voteeName }: Vote) {
                 throw new Error(`No player ${voteeName} is currently playing and alive.`);
             }
 
-            for (const [votee, votes] of currentVotes.entries()) {
+            for (const [votee, votes] of state.currentVotes.entries()) {
                 const idx = votes.indexOf(voterId);
                 if (idx > -1) {
                     votes.splice(idx, 1);
                 }
             }
 
-            currentVotes.get(voteeId).push(voterId);
+            state.currentVotes.get(voteeId).push(voterId);
             return Promise.all([voteeId, getUserNameFromId(voterId)]);
         })
         .then(([voteeId, voterName]) => {
@@ -192,7 +209,7 @@ export function setVote({ voterId, voteeName }: Vote) {
                 const message: string[] = [];
 
                 if (lyncheeId !== NO_LYNCH_NAME) {
-                    const slot = playerSlots.get(lyncheeId);
+                    const slot = state.playerSlots.get(lyncheeId);
                     slot.die();
 
                     const victor = isGameOver();
@@ -200,12 +217,12 @@ export function setVote({ voterId, voteeName }: Vote) {
                         return endGame(victor);
                     }
                     message.push(`${lyncheeName} was lynched. They were a ${slot.name}.`);
-                    message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
+                    message.push(`It is now Night ${state.currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
                 } else {
                     message.push(`No one was lynched.`);
-                    message.push(`It is now Night ${currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
+                    message.push(`It is now Night ${state.currentPhase.num}. Night will last ${process.env.NIGHT_LENGTH} seconds.`);
                 }
-                changePhase({ time: TimeOfDay.Night, num: currentPhase.num });
+                changePhase({ time: TimeOfDay.Night, num: state.currentPhase.num });
                 nightEndTimeout = setTimeout(endNight, parseInt(process.env.NIGHT_LENGTH, 10) * 1000);
 
                 return postPublicMessage(message.join('\n'));
@@ -221,49 +238,25 @@ export function reset(): void {
         clearTimeout(nightEndTimeout);
     }
 
-    if (!currentSetup) {
+    if (!state.currentSetup) {
         setSetup(getFirstSetup()[':tag']);
     }
-    currentGameId = undefined;
 
-    playerIds.length = 0;
-    playerSlots.clear();
+    updateState({
+        currentGameId: undefined,
+        playerIds: [],
+        playerSlots: new Map(),
+        currentActions: []
+    });
 
-    currentActions.length = 0;
     initVotes();
 
 }
 
-export function getPlayers(): Map<string, Slot> {
-    return playerSlots;
-}
-
-export function getGameId(): string {
-    return currentGameId;
-}
-
-export function setDefaultSetup(): void {
-    currentSetup = getFirstSetup();
-}
-
-export function getCurrentSetup(): any {
-    return currentSetup;
-}
-
-export function getFactionChannels(): Map<Alignment, string> {
-    return factionChannels;
-}
-
-export function getPhase(): Phase {
-    return currentPhase;
-}
-
-
-
 // private module methods
 function requirePlaying(playerId: string): Promise<any> {
     return Promise.try(() => {
-        if (!playerSlots.has(playerId)) {
+        if (!state.playerSlots.has(playerId)) {
             throw new Error('You are not currently playing!');
         }
     });
@@ -271,30 +264,31 @@ function requirePlaying(playerId: string): Promise<any> {
 
 function startGame() {
     changePhase({ time: TimeOfDay.Pregame });
-    currentGameId = shortId.generate();
-    playerSlots.clear();
 
-    const shuffledPlayers = _.shuffle(playerIds);
+    updateState({
+        currentGameId: shortId.generate(),
+        playerSlots: new Map()
+    });
+
+    const shuffledPlayers = _.shuffle(state.playerIds);
 
     shuffledPlayers.forEach((playerId, i) => {
-        const rawSlot = currentSetup[':slots'][i];
+        const slotSpec = state.currentSetup.slots[i];
 
-        const name = rawSlot[':name'];
-        const alignment = rawSlot[':alignment'];
+        const name = slotSpec.name;
+        const alignment = slotSpec.alignment;
 
-        const abilities = rawSlot[':abilities'].map(ability => {
+        const abilities = slotSpec.abilities.map(ability => {
             return {
-                abilityType: ability[':ability-type'],
-                usage: {
-                    charges: (ability[':usage'] && ability[':usage'][':charges']) || -1,
-                    parity: (ability[':usage'] && ability[':usage'][':parity']) || ParityType.Any,
-                    time: (ability[':usage'] && ability[':usage'][':time']) || TimeOfDay.Night
-                }
+                abilityType: ability.abilityType,
+                usage: ability.usage
             };
         });
 
         const slot = new Slot(playerId, name, alignment, abilities);
-        playerSlots.set(playerId, slot);
+        updateState({
+            playerSlots: new Map([...state.playerSlots, ...new Map([[playerId, slot]])])
+        });
     });
 
     return Promise.all([createPrivateChannels(), sendRoles()])
@@ -309,7 +303,7 @@ function startGame() {
 }
 
 function createPrivateChannels() {
-    const alignmentMap = Array.from(playerSlots.values())
+    const alignmentMap = Array.from(state.playerSlots.values())
         .reduce((p, c) => {
             if (!p.has(c.alignment)) {
                 return p.set(c.alignment, [c.playerId]);
@@ -322,16 +316,16 @@ function createPrivateChannels() {
     return Promise.all(Array.from(alignmentMap.entries())
         .filter(([alignment, _]) => alignment !== Alignment.Town)
         .map(([alignment, members]) => {
-            return createPrivateChannel(`${AlignmentAttributesMap.get(alignment).name}-${getGameId()}`, members, alignment)
+            return createPrivateChannel(`${AlignmentAttributesMap.get(alignment).name}-${state.currentGameId}`, members, alignment)
                 .then(channelId => {
-                    factionChannels.set(alignment, channelId);
+                    state.factionChannels.set(alignment, channelId);
                     return postMessage(channelId, `Hello.  You are the ${AlignmentAttributesMap.get(alignment).name}`);
                 });
         }));
 }
 
 function sendRoles() {
-    return Promise.all(Array.from(playerSlots.entries())
+    return Promise.all(Array.from(state.playerSlots.entries())
         .map(([playerId, slot]) => {
             return Promise.all([slot, getUserNameFromId(playerId)])
                 .then(([slot, playerName]) => {
@@ -341,12 +335,12 @@ function sendRoles() {
 }
 
 function changePhase(phase: Phase): void {
-    currentPhase = phase;
+    updateState({ currentPhase: phase });
     initVotes();
 
-    for (const playerId of playerIds) {
-        if (playerSlots.has(playerId)) {
-            playerSlots.get(playerId).resetMutableState();
+    for (const playerId of state.playerIds) {
+        if (state.playerSlots.has(playerId)) {
+            state.playerSlots.get(playerId).resetMutableState();
         }
     }
 }
@@ -355,7 +349,7 @@ function addOrReplaceFormattedAction(action: Action) {
     return Promise.try(() => {
         const abilityDef = abilityFactory(action.abilityType);
 
-        if (!validate(action, currentPhase)) {
+        if (!validate(action, state.currentPhase)) {
             throw new Error('You are unable to perform this action.');
         }
 
@@ -364,22 +358,23 @@ function addOrReplaceFormattedAction(action: Action) {
 
         //factional actions may only be performed by one faction member per night
         if (abilityDef.activationType === AbilityActivationType.Factional) {
-            dedupers = _.filter(Array.from(playerSlots), ([player, slot]) => slot.alignment === action.actor.alignment)
+            dedupers = _.filter(Array.from(state.playerSlots), ([player, slot]) => slot.alignment === action.actor.alignment)
                 .map(([player, slot]) => player);
         }
 
         // remove action overwritten by the new one received if any
-        _(currentActions)
+        _(state.currentActions)
             .remove(currentAction => action.abilityType === currentAction.abilityType && _(dedupers).includes(currentAction.actor.playerId))
             .value();
 
         // add new action
-        currentActions.push(action);
-        currentActions.sort((a, b) => {
-            return a.abilityType - b.abilityType;
+        updateState({
+            currentActions: state.currentActions
+                .concat([action])
+                .sort((a, b) => a.abilityType - b.abilityType)
         });
 
-        if (factionChannels.has(action.actor.alignment)) {
+        if (state.factionChannels.has(action.actor.alignment)) {
             return Promise.all([
                 action,
                 getUserNameFromId(action.actor.playerId),
@@ -387,7 +382,7 @@ function addOrReplaceFormattedAction(action: Action) {
             ])
                 .then(([action, playerName, targetName]) => {
                     return postMessage(
-                        factionChannels.get(action.actor.alignment),
+                        state.factionChannels.get(action.actor.alignment),
                         getActionsForFaction(action.actor.alignment).map(action => {
                             let a = `${playerName} will ${actionDescriber(action.abilityType)}`;
 
@@ -402,7 +397,7 @@ function addOrReplaceFormattedAction(action: Action) {
 }
 
 function getVc(): any[] {
-    return Array.from(currentVotes.entries()).reduce((acc, [voteeId, votes]) => {
+    return Array.from(state.currentVotes.entries()).reduce((acc, [voteeId, votes]) => {
         acc.push([voteeId, votes]);
         return acc;
     }, [])
@@ -419,7 +414,7 @@ function getVc(): any[] {
 }
 
 function getLivingPlayers(): Slot[] {
-    return Array.from(playerSlots.values()).filter(slot => slot.isAlive);
+    return Array.from(state.playerSlots.values()).filter(slot => slot.isAlive);
 }
 
 function getLivingPlayerCount(): number {
@@ -428,31 +423,29 @@ function getLivingPlayerCount(): number {
 
 function initVotes(): void {
     const livingPlayerIdsUnordered = getLivingPlayers().map(player => player.playerId);
-    const livingPlayerIds = playerIds.filter(playerId => livingPlayerIdsUnordered.includes(playerId));
+    const livingPlayerIds = state.playerIds.filter(playerId => livingPlayerIdsUnordered.includes(playerId));
 
-    currentVotes = livingPlayerIds
-        .reduce((acc, playerId) => {
-            acc.set(playerId, []);
-            return acc;
-        }, new Map<string, string[]>());
-
-    currentVotes.set(NOT_VOTING_NAME, []);
-    currentVotes.set(NO_LYNCH_NAME, []);
-
-    livingPlayerIds.forEach(playerId => {
-        currentVotes.get(NOT_VOTING_NAME).push(playerId);
+    updateState({
+        currentVotes: new Map(
+            livingPlayerIds.map(playerId => {
+                return [playerId, []];
+            }).concat([
+                [NOT_VOTING_NAME, livingPlayerIds],
+                [NO_LYNCH_NAME, []]
+            ]) as Array<[string, string[]]>
+        )
     });
 }
 
 function getActionsForFaction(faction: Alignment): Action[] {
-    return currentActions.filter(action => {
+    return state.currentActions.filter(action => {
         return action.actor.alignment === faction;
     });
 }
 
 function endNight() {
     const passivesToApply = [];
-    Array.from(playerSlots.values()).forEach(slot => {
+    Array.from(state.playerSlots.values()).forEach(slot => {
         slot.abilities.forEach(ability => {
             const abilityDef = abilityFactory(ability.abilityType);
             if (abilityDef.activationType === AbilityActivationType.Passive) {
@@ -467,7 +460,7 @@ function endNight() {
 
     return Promise.all(passivesToApply)
         .then(() => {
-            return Promise.each(currentActions, action => {
+            return Promise.each(state.currentActions, action => {
                 const ability = abilityFactory(action.abilityType);
                 action.actor.consumeAbility(action.abilityType);
                 return Promise.resolve(ability.resolve(action.actor, action.target));
@@ -479,8 +472,8 @@ function endNight() {
                 return endGame(victor);
             }
 
-            changePhase({ time: TimeOfDay.Day, num: currentPhase.num + 1 });
-            return postPublicMessage(`It is now Day ${currentPhase.num}`)
+            changePhase({ time: TimeOfDay.Day, num: state.currentPhase.num + 1 });
+            return postPublicMessage(`It is now Day ${state.currentPhase.num}`)
                 .then(() => {
                     initVotes();
                     doVoteCount();
@@ -540,7 +533,7 @@ function isGameOver(): Alignment {
 }
 
 function endGame(victor: Alignment) {
-    const winners = Array.from(playerSlots.values()).filter(slot => slot.alignment === victor);
+    const winners = Array.from(state.playerSlots.values()).filter(slot => slot.alignment === victor);
 
     return getUserIdToNameMap()
         .then(idToNameMap => {
